@@ -1,0 +1,39 @@
+plugins = []
+headers = []
+
+[functions]
+
+[functions."*"]
+
+[build]
+publish = "/Users/khuldie/Desktop/Trimble eCommerce UX Projects/eCommerce Support Portal/Trimble-Support-Portal-Email-Repository-Prototype/dist"
+publishOrigin = "ui"
+commandOrigin = "ui"
+base = "/Users/khuldie/Desktop/Trimble eCommerce UX Projects/eCommerce Support Portal/Trimble-Support-Portal-Email-Repository-Prototype"
+command = "npm run build"
+
+[build.environment]
+
+[build.processing]
+
+[build.processing.css]
+
+[build.processing.html]
+
+[build.processing.images]
+
+[build.processing.js]
+
+[build.services]
+
+[[redirects]]
+from = "/*"
+to = "/index.html"
+status = 200.0
+force = false
+
+[redirects.query]
+
+[redirects.conditions]
+
+[redirects.headers]
