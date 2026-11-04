@@ -7,6 +7,7 @@ import {
 } from '../../data/mockLogs';
 import { formatLogTimestamp } from '../../utils/formatLogDate';
 import { getStatusBadgeStyle } from '../../utils/getStatusBadgeStyle';
+import { TriggeringEventTooltipLabel } from './TriggeringEventTooltipLabel';
 
 export interface EmailLog {
   id: string;
@@ -147,13 +148,15 @@ export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) =>
                 </td>
 
                 {/* Column 3: Triggering Event */}
-                <td className="w-[24%] px-6 py-3.5 align-middle">
-                  <div
-                    title={log.triggeringEvent}
-                    className="cursor-help break-words text-xs font-medium leading-snug text-[#121212] line-clamp-2"
-                  >
-                    {log.triggeringEvent}
-                  </div>
+                <td
+                  className="w-[24%] px-6 py-3.5 align-middle"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <TriggeringEventTooltipLabel
+                    logId={log.id}
+                    triggeringEvent={log.triggeringEvent}
+                  />
                 </td>
 
                 {/* Column 4: Status Badge & Timestamp */}

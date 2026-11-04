@@ -7,6 +7,7 @@ import { CommunicationActionsPanel } from '../components/log-details/Communicati
 import { LogDetailsHeaderSection } from '../components/log-details/LogDetailsHeaderSection';
 import { MessageMetadataSection } from '../components/log-details/MessageMetadataSection';
 import { PortalShell } from '../components/PortalShell';
+import { communicationActionsReadOnly, useSandbox } from '../context/SandboxContext';
 import { getActivityLogById, mockLogs } from '../data/mockLogs';
 import { formatCommunicationSuccessToastMessage } from '../utils/successToastMessages';
 import {
@@ -18,6 +19,8 @@ import {
 const TOAST_DURATION_MS = 4000;
 
 export function LogDetailsPage() {
+  const { repRole, releaseStage } = useSandbox();
+  const actionsReadOnly = communicationActionsReadOnly(repRole, releaseStage);
   const { logId } = useParams<{ logId: string }>();
   const log = logId ? getActivityLogById(logId) || mockLogs[0] : mockLogs[0];
 
@@ -55,9 +58,13 @@ export function LogDetailsPage() {
         <MessageMetadataSection log={log} onSuccessToast={setToastMessage} />
         <ArchivedMessageSnapshotPanel log={log} />
 
-        <AuditTable historyLogs={historyLogs} />
+        <AuditTable historyLogs={historyLogs} sourceLogId={log.id} />
 
-        <CommunicationActionsPanel log={log} onCommunicationLogged={handleCommunicationLogged} />
+        <CommunicationActionsPanel
+          log={log}
+          readOnly={actionsReadOnly}
+          onCommunicationLogged={handleCommunicationLogged}
+        />
       </div>
       {toastMessage ? (
         <ActionSuccessToast message={toastMessage} onClose={dismissToast} />

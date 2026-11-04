@@ -1,16 +1,60 @@
 import type { AuditLog } from '../../types/communicationAudit';
+import type { LogDeliveryStatus } from '../../data/mockLogs';
+import {
+  auditLogMatchesSandboxDelivery,
+  logMatchesSandboxTemplate,
+  telemetryStreamWarning,
+  useSandbox,
+} from '../../context/SandboxContext';
+import { getActivityLogById } from '../../data/mockLogs';
 
 type AuditTableProps = {
   historyLogs: AuditLog[];
+  /** Source log for template filtering when audit rows lack template metadata. */
+  sourceLogId?: string;
 };
 
 /** Fixed 1068px, 5-column audit history table (Modus 1.0 / MXP chrome tokens). */
-export function AuditTable({ historyLogs }: AuditTableProps) {
-  const hasHistoryLogs = historyLogs.length > 0;
+export function AuditTable({ historyLogs, sourceLogId }: AuditTableProps) {
+  const { telemetryStream, deliveryStatus, templateType, featureScope } = useSandbox();
+  const telemetryNotice =
+    featureScope === 'DXPBK-1900' ? telemetryStreamWarning(telemetryStream) : null;
+
+  const sourceLog = sourceLogId ? getActivityLogById(sourceLogId) : undefined;
+  const templateGateOk =
+    featureScope !== 'DXPBK-1900'
+    || !sourceLog
+    || logMatchesSandboxTemplate(sourceLog, templateType);
+
+  const filteredHistory = historyLogs.filter((row) => {
+    if (featureScope !== 'DXPBK-1900') {
+      return true;
+    }
+    const rowDelivery = inferRowDeliveryStatus(row);
+    return (
+      auditLogMatchesSandboxDelivery(rowDelivery, deliveryStatus)
+      && templateGateOk
+    );
+  });
+
+  const hasHistoryLogs = filteredHistory.length > 0;
 
   return (
     <div className="mb-6 w-[1068px] max-w-full rounded-lg border border-[#CBCDD6] bg-white p-6">
       <h2 className="mb-3 text-sm font-bold text-[#121212]">Audit and Communication History</h2>
+      {telemetryNotice ? (
+        <p
+          className="mb-3 rounded border border-[#E36C09] bg-[#FFF4E5] px-2 py-1.5 text-[11px] font-semibold text-[#7A4100]"
+          role="alert"
+        >
+          {telemetryNotice}
+        </p>
+      ) : null}
+      {featureScope === 'DXPBK-1900' && deliveryStatus !== 'all-dispatches' ? (
+        <p className="mb-3 text-[11px] text-[#525866]" role="status">
+          Sandbox delivery filter active — showing audit rows matching the simulated dispatch state.
+        </p>
+      ) : null}
 
       {hasHistoryLogs ? (
         <div className="overflow-hidden rounded-lg border border-[#CBCDD6] bg-white">
@@ -35,7 +79,7 @@ export function AuditTable({ historyLogs }: AuditTableProps) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#CBCDD6] text-xs text-[#121212]">
-              {historyLogs.map((row, index) => (
+              {filteredHistory.map((row, index) => (
                 <tr key={index} className="transition-colors hover:bg-[#F8F9FA]">
                   <td className="px-3 py-2.5 align-top">
                     <div className="text-xs font-bold text-[#121212]">{row.date}</div>
@@ -79,9 +123,23 @@ export function AuditTable({ historyLogs }: AuditTableProps) {
         </div>
       ) : (
         <p className="text-xs text-[#525866]">
-          No representative-initiated communication actions are recorded yet.
+          {historyLogs.length > 0 && featureScope === 'DXPBK-1900'
+            ? 'No audit rows match the current sandbox delivery or template simulation.'
+            : 'No representative-initiated communication actions are recorded yet.'}
         </p>
       )}
     </div>
   );
+}
+
+/** Audit table rows do not carry delivery status; assume rep actions succeed as Delivered unless notes imply failure. */
+function inferRowDeliveryStatus(row: AuditLog): LogDeliveryStatus {
+  const notes = `${row.notes} ${row.justification}`.toLowerCase();
+  if (notes.includes('bounce') || notes.includes('550')) {
+    return 'Bounced';
+  }
+  if (notes.includes('pending') || notes.includes('hold')) {
+    return 'Pending';
+  }
+  return 'Delivered';
 }

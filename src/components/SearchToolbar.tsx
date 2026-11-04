@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Search, SlidersHorizontal, X } from 'lucide-react';
 import type { AdvancedFilterFields } from '../data/mockLogs';
 import {
+  advancedFiltersDraftHasErrors,
   validateAdvancedFiltersDraft,
 } from '../utils/advancedFilterValidation';
 import { validateSearchQuery } from '../utils/searchValidation';
@@ -12,6 +14,7 @@ import {
   advancedFieldsFromFilters,
   DEFAULT_ADVANCED_FILTER_FIELDS,
 } from './AdvancedFilters';
+import { readSandboxSimError } from '../utils/sandboxErrorDeepLink';
 
 export type SearchToolbarProps = {
   searchQuery: string;
@@ -34,6 +37,8 @@ export function SearchToolbar({
   onFiltersOpenChange,
   activeFilterBarVisible = false,
 }: SearchToolbarProps) {
+  const [searchParams] = useSearchParams();
+  const simError = readSandboxSimError(searchParams);
   const searchInputId = 'activity-logs-search';
   const searchErrorId = `${searchInputId}-error`;
   const showClear = searchQuery.length > 0;
@@ -59,16 +64,31 @@ export function SearchToolbar({
     const next =
       searchError
       ?? advancedErrors.recipientEmailError
-      ?? advancedErrors.dateRangeError
+      ?? advancedErrors.orderIdError
+      ?? advancedErrors.startDateError
+      ?? advancedErrors.endDateError
       ?? '';
     if (next) setLiveMessage(next);
-  }, [searchError, advancedErrors.recipientEmailError, advancedErrors.dateRangeError]);
+  }, [
+    searchError,
+    advancedErrors.recipientEmailError,
+    advancedErrors.orderIdError,
+    advancedErrors.startDateError,
+    advancedErrors.endDateError,
+  ]);
+
+  useEffect(() => {
+    if (simError !== 'filter-inline' || filtersOpen) return;
+    onFiltersOpenChange(true);
+  }, [simError, filtersOpen, onFiltersOpenChange]);
 
   const handleApply = () => {
     const errors = validateAdvancedFiltersDraft(draft);
-    if (errors.recipientEmailError || errors.dateRangeError) {
+    if (advancedFiltersDraftHasErrors(errors)) {
       if (errors.recipientEmailError) setLiveMessage(errors.recipientEmailError);
-      if (errors.dateRangeError) setLiveMessage(errors.dateRangeError);
+      if (errors.orderIdError) setLiveMessage(errors.orderIdError);
+      if (errors.startDateError) setLiveMessage(errors.startDateError);
+      if (errors.endDateError) setLiveMessage(errors.endDateError);
       return;
     }
     onApplyAdvancedFilters(draft);
@@ -182,7 +202,9 @@ export function SearchToolbar({
             onApply={handleApply}
             onClear={handleClear}
             recipientEmailError={advancedErrors.recipientEmailError}
-            dateRangeError={advancedErrors.dateRangeError}
+            startDateError={advancedErrors.startDateError}
+            endDateError={advancedErrors.endDateError}
+            orderIdError={advancedErrors.orderIdError}
             onRecipientEmailBlur={() => undefined}
           />
         </div>

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { AlertCircle, Calendar, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   DEFAULT_ADVANCED_FILTER_FIELDS,
   DELIVERY_STATUS_OPTIONS,
@@ -8,7 +8,6 @@ import {
   type LogDeliveryStatus,
 } from '../../data/mockLogs';
 import { getStatusBadgeStyle } from '../../utils/getStatusBadgeStyle';
-import { InlineFieldError } from '../InlineFieldError';
 
 export type LogsFilterModalProps = {
   id: string;
@@ -17,9 +16,21 @@ export type LogsFilterModalProps = {
   onApply: () => void;
   onClear: () => void;
   recipientEmailError?: string | null;
-  dateRangeError?: string | null;
+  startDateError?: string | null;
+  endDateError?: string | null;
   onRecipientEmailBlur?: () => void;
+  orderIdError?: string | null;
 };
+
+const NEUTRAL_FIELD_BORDER = 'border-[#C2C8D0]';
+const DANGER_FIELD_BORDER =
+  'border-[#A81E1E] focus:border-[#A81E1E] focus:ring-1 focus:ring-[#A81E1E]';
+const NEUTRAL_FOCUS = 'focus:border-[#0063A3] focus:ring-1 focus:ring-[#0063A3]';
+
+const RECIPIENT_EMAIL_ERROR_ID = 'recipient-email-error';
+const ORDER_ID_ERROR_ID = 'order-id-error';
+const START_DATE_ERROR_ID = 'start-date-error';
+const END_DATE_ERROR_ID = 'end-date-error';
 
 function FieldLabel({ htmlFor, children }: { htmlFor?: string; children: string }) {
   return (
@@ -29,24 +40,82 @@ function FieldLabel({ htmlFor, children }: { htmlFor?: string; children: string 
   );
 }
 
-function TextField({
+function InlineFieldAlert({ id, message }: { id: string; message: string }) {
+  return (
+    <p id={id} role="alert" className="mt-1 flex items-center gap-1 text-xs text-[#A81E1E]">
+      <span aria-hidden="true">⚠</span>
+      {message}
+    </p>
+  );
+}
+
+function DangerTextInput({
   id,
   label,
   value,
   placeholder,
+  errorMessage,
+  errorMessageId,
   onChange,
-  error,
-  helperText,
   onBlur,
 }: {
   id: string;
   label: string;
   value: string;
   placeholder: string;
+  errorMessage?: string | null;
+  errorMessageId: string;
   onChange: (value: string) => void;
-  error?: boolean;
-  helperText?: string;
   onBlur?: () => void;
+}) {
+  const invalid = Boolean(errorMessage);
+
+  return (
+    <div>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <div className="relative">
+        <input
+          id={id}
+          type="text"
+          value={value}
+          placeholder={placeholder}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? errorMessageId : undefined}
+          className={[
+            'h-10 w-full rounded-md border bg-white py-2 pl-3 text-xs text-[#121212] placeholder:text-[#525866] focus:outline-none',
+            invalid
+              ? `${DANGER_FIELD_BORDER} pr-10`
+              : `${NEUTRAL_FIELD_BORDER} pr-3 ${NEUTRAL_FOCUS}`,
+          ].join(' ')}
+          onChange={(e) => onChange(e.target.value)}
+          onBlur={onBlur}
+        />
+        {invalid ? (
+          <AlertCircle
+            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A81E1E]"
+            aria-hidden
+          />
+        ) : null}
+      </div>
+      {invalid && errorMessage ? (
+        <InlineFieldAlert id={errorMessageId} message={errorMessage} />
+      ) : null}
+    </div>
+  );
+}
+
+function NeutralTextField({
+  id,
+  label,
+  value,
+  placeholder,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  placeholder: string;
+  onChange: (value: string) => void;
 }) {
   return (
     <div>
@@ -56,16 +125,9 @@ function TextField({
         type="text"
         value={value}
         placeholder={placeholder}
-        aria-invalid={error || undefined}
-        aria-describedby={helperText ? `${id}-error` : undefined}
-        className={[
-          'h-10 w-full rounded-md border bg-white px-3 py-2 text-xs text-[#121212] placeholder:text-[#525866] focus:outline-none focus:ring-2 focus:ring-[#0063A3]',
-          error ? 'border-[#DA212C] focus:ring-[#DA212C]' : 'border-[#CBCDD6]',
-        ].join(' ')}
+        className={`h-10 w-full rounded-md border ${NEUTRAL_FIELD_BORDER} bg-white px-3 py-2 text-xs text-[#121212] placeholder:text-[#525866] focus:outline-none ${NEUTRAL_FOCUS}`}
         onChange={(e) => onChange(e.target.value)}
-        onBlur={onBlur}
       />
-      {helperText ? <InlineFieldError id={`${id}-error`} message={helperText} /> : null}
     </div>
   );
 }
@@ -86,7 +148,7 @@ function TriggeringEventSelect({
         <select
           id={id}
           value={value}
-          className="h-10 w-full cursor-pointer appearance-none rounded-md border border-[#CBCDD6] bg-white py-2 pl-3 pr-9 text-xs text-[#121212] focus:outline-none focus:ring-2 focus:ring-[#0063A3]"
+          className={`h-10 w-full cursor-pointer appearance-none rounded-md border ${NEUTRAL_FIELD_BORDER} bg-white py-2 pl-3 pr-9 text-xs text-[#121212] focus:outline-none ${NEUTRAL_FOCUS}`}
           onChange={(e) => onChange(e.target.value)}
         >
           {TRIGGERING_EVENT_OPTIONS.map((opt) => (
@@ -285,8 +347,8 @@ function DatePickerField({
   id,
   label,
   value,
-  invalid,
-  describedBy,
+  errorMessage,
+  errorMessageId,
   isOpen,
   onOpenChange,
   onChange,
@@ -294,13 +356,14 @@ function DatePickerField({
   id: string;
   label: string;
   value: string;
-  invalid: boolean;
-  describedBy: string;
+  errorMessage?: string | null;
+  errorMessageId: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onChange: (iso: string) => void;
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
+  const invalid = Boolean(errorMessage);
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -319,13 +382,6 @@ function DatePickerField({
     };
   }, [isOpen, onOpenChange]);
 
-  const inputClass = [
-    'w-full cursor-pointer rounded-md border py-2 pl-3 pr-10 text-xs text-[#121212] focus:outline-none focus:ring-2',
-    invalid
-      ? 'border-[#DA212C] bg-[#FDF2F2] focus:ring-[#DA212C]'
-      : 'border-[#CBCDD6] focus:ring-[#0063A3]',
-  ].join(' ');
-
   return (
     <div className="relative w-full">
       <label htmlFor={id} className="mb-1 block text-xs font-bold text-[#121212]">
@@ -337,18 +393,30 @@ function DatePickerField({
           type="date"
           readOnly
           value={value}
-          aria-invalid={invalid}
-          aria-describedby={describedBy}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? errorMessageId : undefined}
           aria-expanded={isOpen}
           aria-haspopup="dialog"
-          className={[inputClass, '[&::-webkit-calendar-picker-indicator]:opacity-0'].join(' ')}
+          className={[
+            'h-10 w-full cursor-pointer rounded-md border bg-white py-2 pl-3 text-xs text-[#121212] focus:outline-none [&::-webkit-calendar-picker-indicator]:opacity-0',
+            invalid
+              ? `${DANGER_FIELD_BORDER} pr-10`
+              : `${NEUTRAL_FIELD_BORDER} pr-10 ${NEUTRAL_FOCUS}`,
+          ].join(' ')}
           onFocus={() => onOpenChange(true)}
           onClick={() => onOpenChange(true)}
         />
-        <Calendar
-          aria-hidden
-          className="pointer-events-none absolute right-3 h-4 w-4 text-[#525866]"
-        />
+        {invalid ? (
+          <AlertCircle
+            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#A81E1E]"
+            aria-hidden
+          />
+        ) : (
+          <Calendar
+            aria-hidden
+            className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#525866]"
+          />
+        )}
         {isOpen ? (
           <div
             role="dialog"
@@ -365,6 +433,9 @@ function DatePickerField({
           </div>
         ) : null}
       </div>
+      {invalid && errorMessage ? (
+        <InlineFieldAlert id={errorMessageId} message={errorMessage} />
+      ) : null}
     </div>
   );
 }
@@ -373,34 +444,25 @@ function DateRangeSection({
   formId,
   startDate,
   endDate,
-  dateError,
+  startDateError,
+  endDateError,
   onStartDateChange,
   onEndDateChange,
 }: {
   formId: string;
   startDate: string;
   endDate: string;
-  dateError: string | null;
+  startDateError: string | null;
+  endDateError: string | null;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
 }) {
   const startId = `${formId}-start-date`;
   const endId = `${formId}-end-date`;
   const helpId = `${formId}-date-help-text`;
-  const errorId = `${formId}-date-error-msg`;
-  const describedBy = dateError ? errorId : helpId;
-  const invalid = Boolean(dateError);
 
   const [isStartDateOpen, setIsStartDateOpen] = useState(false);
   const [isEndDateOpen, setIsEndDateOpen] = useState(false);
-
-  const handleStartDateChange = (value: string) => {
-    onStartDateChange(value);
-  };
-
-  const handleEndDateChange = (value: string) => {
-    onEndDateChange(value);
-  };
 
   const openStartDate = (open: boolean) => {
     setIsStartDateOpen(open);
@@ -419,37 +481,27 @@ function DateRangeSection({
           id={startId}
           label="Start date"
           value={startDate}
-          invalid={invalid}
-          describedBy={describedBy}
+          errorMessage={startDateError}
+          errorMessageId={START_DATE_ERROR_ID}
           isOpen={isStartDateOpen}
           onOpenChange={openStartDate}
-          onChange={handleStartDateChange}
+          onChange={onStartDateChange}
         />
         <DatePickerField
           id={endId}
           label="End date"
           value={endDate}
-          invalid={invalid}
-          describedBy={describedBy}
+          errorMessage={endDateError}
+          errorMessageId={END_DATE_ERROR_ID}
           isOpen={isEndDateOpen}
           onOpenChange={openEndDate}
-          onChange={handleEndDateChange}
+          onChange={onEndDateChange}
         />
       </div>
 
       <p id={helpId} className="mt-1 text-[11px] text-[#525866]">
         Dates are queried in UTC and displayed in your local browser timezone (EDT).
       </p>
-
-      {dateError ? (
-        <p
-          id={errorId}
-          role="alert"
-          className="mt-1 flex items-center gap-1 text-[11px] font-semibold text-[#DA212C]"
-        >
-          <span aria-hidden>⚠️</span> {dateError}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -461,15 +513,18 @@ export function LogsFilterModal({
   onApply,
   onClear,
   recipientEmailError,
-  dateRangeError,
+  startDateError,
+  endDateError,
   onRecipientEmailBlur,
+  orderIdError,
 }: LogsFilterModalProps) {
   const patch = (partial: Partial<AdvancedFilterFields>) => {
     onChange({ ...values, ...partial });
   };
 
-  const recipientInvalid = Boolean(recipientEmailError);
-  const dateError = dateRangeError ?? null;
+  const applyDisabled = Boolean(
+    recipientEmailError || orderIdError || startDateError || endDateError,
+  );
 
   return (
     <div
@@ -485,17 +540,17 @@ export function LogsFilterModal({
 
       <div className="space-y-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <TextField
+          <DangerTextInput
             id={`${id}-recipient-email`}
             label="Recipient email"
             value={values.recipientEmail}
             placeholder="Enter recipient email"
-            error={recipientInvalid}
-            helperText={recipientEmailError ?? undefined}
+            errorMessage={recipientEmailError ?? undefined}
+            errorMessageId={RECIPIENT_EMAIL_ERROR_ID}
             onChange={(recipientEmail) => patch({ recipientEmail })}
             onBlur={onRecipientEmailBlur}
           />
-          <TextField
+          <NeutralTextField
             id={`${id}-customer-name`}
             label="Customer name"
             value={values.customerName}
@@ -505,11 +560,13 @@ export function LogsFilterModal({
         </div>
 
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <TextField
+          <DangerTextInput
             id={`${id}-order-id`}
             label="Order ID"
             value={values.orderId}
             placeholder="Enter order ID"
+            errorMessage={orderIdError}
+            errorMessageId={ORDER_ID_ERROR_ID}
             onChange={(orderId) => patch({ orderId })}
           />
           <TriggeringEventSelect
@@ -523,7 +580,8 @@ export function LogsFilterModal({
           formId={id}
           startDate={values.dateFrom}
           endDate={values.dateTo}
-          dateError={dateError}
+          startDateError={startDateError ?? null}
+          endDateError={endDateError ?? null}
           onStartDateChange={(dateFrom) => patch({ dateFrom })}
           onEndDateChange={(dateTo) => patch({ dateTo })}
         />
@@ -544,8 +602,17 @@ export function LogsFilterModal({
         </button>
         <button
           type="button"
-          className="inline-flex h-9 items-center justify-center rounded bg-[#0063A3] px-4 text-xs font-semibold text-white hover:bg-[#004f87] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-1"
-          onClick={onApply}
+          disabled={applyDisabled}
+          aria-disabled={applyDisabled}
+          className={[
+            'inline-flex h-9 items-center justify-center rounded bg-[#0063A3] px-4 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-1',
+            applyDisabled
+              ? 'cursor-not-allowed opacity-50'
+              : 'hover:bg-[#004f87]',
+          ].join(' ')}
+          onClick={() => {
+            if (!applyDisabled) onApply();
+          }}
         >
           Apply filters
         </button>

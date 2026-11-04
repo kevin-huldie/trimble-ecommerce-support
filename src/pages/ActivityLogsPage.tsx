@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ActivityLogsSidebar,
   sidebarNavToFilters,
@@ -26,17 +27,43 @@ import {
   type LogDeliveryStatus,
 } from '../data/mockLogs';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { SandboxTelemetryBanner } from '../components/SandboxTelemetryBanner';
+import {
+  logMatchesSandboxDelivery,
+  logMatchesSandboxTemplate,
+  useSandbox,
+} from '../context/SandboxContext';
+import {
+  activityLogsSandboxErrorPreset,
+  isSandboxActivityLogError,
+  readSandboxSimError,
+} from '../utils/sandboxErrorDeepLink';
 
 const SEARCH_DEBOUNCE_MS = 250;
 const DEFAULT_PAGE_SIZE = 20;
 
 export function ActivityLogsPage() {
+  const { deliveryStatus, templateType, featureScope } = useSandbox();
+  const [searchParams] = useSearchParams();
   const [filters, setFilters] = useState<ActivityLogFilters>(DEFAULT_ACTIVITY_LOG_FILTERS);
   const [activeNav, setActiveNav] = useState<SidebarNavId>('all-logs');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const sandboxSimError = readSandboxSimError(searchParams);
+
+  useEffect(() => {
+    if (!isSandboxActivityLogError(sandboxSimError)) {
+      return;
+    }
+    const { filtersPatch, filtersOpen: openDrawer } =
+      activityLogsSandboxErrorPreset(sandboxSimError);
+    setFilters((prev) => ({ ...prev, ...filtersPatch }));
+    setFiltersOpen(openDrawer);
+    setPage(1);
+  }, [sandboxSimError]);
 
   const debouncedSearch = useDebouncedValue(filters.searchQuery, SEARCH_DEBOUNCE_MS);
 
@@ -45,10 +72,17 @@ export function ActivityLogsPage() {
     [filters, debouncedSearch],
   );
 
-  const filteredLogs = useMemo(
-    () => filterActivityLogs(MOCK_ACTIVITY_LOGS, effectiveFilters),
-    [effectiveFilters, refreshKey],
-  );
+  const filteredLogs = useMemo(() => {
+    const base = filterActivityLogs(MOCK_ACTIVITY_LOGS, effectiveFilters);
+    if (featureScope !== 'DXPBK-1900') {
+      return base;
+    }
+    return base.filter(
+      (log) =>
+        logMatchesSandboxDelivery(log, deliveryStatus)
+        && logMatchesSandboxTemplate(log, templateType),
+    );
+  }, [effectiveFilters, refreshKey, featureScope, deliveryStatus, templateType]);
 
   const bouncedCount = useMemo(
     () => countLogsByDeliveryStatus(MOCK_ACTIVITY_LOGS, 'Bounced'),
@@ -181,6 +215,7 @@ export function ActivityLogsPage() {
             <section aria-label="Email activity results" className="flex min-w-0 flex-col gap-0">
               {totalCount > 0 ? (
                 <div className="flex flex-col gap-0 overflow-visible rounded border border-[#CBCDD6] bg-white shadow-sm">
+                  <SandboxTelemetryBanner />
                   {activeFilterBanner}
                   <TableSummaryToolbar
                     totalCount={totalCount}
