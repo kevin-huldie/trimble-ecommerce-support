@@ -5,16 +5,20 @@ import {
   RECIPIENT_EMAIL_TOOLTIP_MIN_LENGTH,
   type LogDeliveryStatus,
 } from '../../data/mockLogs';
-import { formatLogTimestamp } from '../../utils/formatLogDate';
+import { formatLogMvpDateTimeStack } from '../../utils/formatLogDate';
 import { getStatusBadgeStyle } from '../../utils/getStatusBadgeStyle';
+import { CompactDeliveryStatusBadge } from './CompactDeliveryStatusBadge';
 import { TriggeringEventTooltipLabel } from './TriggeringEventTooltipLabel';
 
 export interface EmailLog {
   id: string;
+  /** Display name for MVP recipient column (customer). */
+  customerName: string;
   recipientName: string;
   recipientEmail: string;
   accountNumber: string;
   orderId: string;
+  subjectLine: string;
   triggeringEvent: string;
   sendgridTemplateId: string;
   status: LogDeliveryStatus;
@@ -25,9 +29,22 @@ export interface EmailLog {
 interface LogsTableProps {
   logs: EmailLog[];
   onClearFilters?: () => void;
+  /** Stage 1: MVP or Stage 2: Enhanced — 3-column Recipient / Subject / Date-Time layout. */
+  compactLayout?: boolean;
+  /** Stage 2: Enhanced — status badge above stacked date/time in column 3. */
+  showStatusInDateColumn?: boolean;
+  /** @deprecated Use `compactLayout`. */
+  stage1Mvp?: boolean;
 }
 
-export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) => {
+export const LogsTable: React.FC<LogsTableProps> = ({
+  logs,
+  onClearFilters,
+  compactLayout: compactLayoutProp,
+  showStatusInDateColumn = false,
+  stage1Mvp = false,
+}) => {
+  const compactLayout = compactLayoutProp ?? stage1Mvp;
   const navigate = useNavigate();
   const [copiedId, setCopiedId] = useState<string | null>(null);
 
@@ -69,6 +86,104 @@ export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) =>
     );
   }
 
+  const rowNavProps = (log: EmailLog) => ({
+    tabIndex: 0 as const,
+    role: 'button' as const,
+    'aria-label': compactLayout
+      ? `View log details for ${log.recipientEmail}`
+      : `View log details for order ${log.orderId}`,
+    onClick: () => navigate(`/logs/${log.id}`),
+    onKeyDown: (e: React.KeyboardEvent) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        navigate(`/logs/${log.id}`);
+      }
+    },
+    className:
+      'cursor-pointer border-b border-[#CBCDD6] transition-colors hover:bg-[#F1F1F6]/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#0063A3]',
+  });
+
+  if (compactLayout) {
+    return (
+      <div className="w-full overflow-hidden bg-white">
+        <div className="w-full overflow-hidden">
+          <table className="w-full table-fixed border-collapse text-left">
+            <thead className="border-b border-[#CBCDD6] bg-[#F1F1F6]">
+              <tr>
+                <th className="w-[34%] px-6 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-[#121212]">
+                  Recipient
+                </th>
+                <th className="w-[40%] px-6 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-[#121212]">
+                  Subject
+                </th>
+                <th className="w-[26%] px-6 py-3 text-left text-[11px] font-bold uppercase tracking-wider text-[#121212]">
+                  Date/Time
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log) => {
+                const stackedDateTime = formatLogMvpDateTimeStack(log.timestamp);
+                return (
+                  <tr key={log.id} {...rowNavProps(log)}>
+                    <td className="px-6 py-3.5 align-top text-xs">
+                      <div className="min-w-0">
+                        <div className="truncate text-xs font-bold text-gray-900">
+                          {log.customerName || 'John Doe'}
+                        </div>
+                        <div
+                          className="mt-0.5 min-w-0 truncate text-xs text-gray-500"
+                          title={
+                            log.recipientEmail.length >= RECIPIENT_EMAIL_TOOLTIP_MIN_LENGTH
+                              ? log.recipientEmail
+                              : undefined
+                          }
+                        >
+                          <span className="sr-only">Email: </span>
+                          {log.recipientEmail}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-3.5 align-top text-xs">
+                      <div className="min-w-0 truncate text-xs text-gray-900" title={log.subjectLine}>
+                        {log.subjectLine}
+                      </div>
+                    </td>
+                    <td className="px-6 py-3.5 align-top text-xs">
+                      {showStatusInDateColumn ? (
+                        <div className="mb-1">
+                          <span className="sr-only">Status: </span>
+                          <CompactDeliveryStatusBadge
+                            status={log.status}
+                            diagnostic={log.smtpDiagnostic}
+                          />
+                        </div>
+                      ) : null}
+                      <time
+                        dateTime={stackedDateTime.datetime}
+                        title={stackedDateTime.title}
+                        className="block min-w-0"
+                      >
+                        <span className="block truncate font-normal text-gray-900">
+                          {stackedDateTime.dateLine}
+                        </span>
+                        {stackedDateTime.timeLine ? (
+                          <span className="mt-0.5 block truncate font-normal text-gray-500">
+                            {stackedDateTime.timeLine}
+                          </span>
+                        ) : null}
+                      </time>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full overflow-hidden bg-white">
       <div className="w-full overflow-hidden">
@@ -90,23 +205,11 @@ export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) =>
             </tr>
           </thead>
           <tbody>
-            {logs.map((log) => (
-              <tr
-                key={log.id}
-                tabIndex={0}
-                role="button"
-                aria-label={`View log details for order ${log.orderId}`}
-                onClick={() => navigate(`/logs/${log.id}`)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    navigate(`/logs/${log.id}`);
-                  }
-                }}
-                className="cursor-pointer border-b border-[#CBCDD6] transition-colors hover:bg-[#F1F1F6]/70 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-[#0063A3]"
-              >
-                {/* Column 1: Recipient Details */}
-                <td className="w-[30%] px-6 py-3.5 align-middle">
+            {logs.map((log) => {
+              const statusDateTime = formatLogMvpDateTimeStack(log.timestamp);
+              return (
+              <tr key={log.id} {...rowNavProps(log)}>
+                <td className="w-[30%] px-6 py-3.5 align-top">
                   <div className="min-w-0 text-xs font-bold text-[#121212]">{log.recipientName}</div>
                   <div
                     className="min-w-0 truncate text-xs text-[#525866]"
@@ -120,8 +223,7 @@ export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) =>
                   </div>
                 </td>
 
-                {/* Column 2: Order ID & Copy CTA */}
-                <td className="w-[26%] whitespace-nowrap px-6 py-3.5 align-middle">
+                <td className="w-[26%] whitespace-nowrap px-6 py-3.5 align-top">
                   <div className="flex items-center gap-2">
                     <span
                       title={`Order ID: ${log.orderId} — Click row to view full details`}
@@ -147,9 +249,8 @@ export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) =>
                   </div>
                 </td>
 
-                {/* Column 3: Triggering Event */}
                 <td
-                  className="w-[24%] px-6 py-3.5 align-middle"
+                  className="w-[24%] px-6 py-3.5 align-top"
                   onClick={(event) => event.stopPropagation()}
                   onKeyDown={(event) => event.stopPropagation()}
                 >
@@ -159,8 +260,7 @@ export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) =>
                   />
                 </td>
 
-                {/* Column 4: Status Badge & Timestamp */}
-                <td className="w-[20%] px-6 py-3.5 align-middle text-left">
+                <td className="w-[20%] px-6 py-3.5 align-top text-left">
                   <div className="flex flex-col items-start gap-1">
                     <span
                       title={log.smtpDiagnostic}
@@ -169,19 +269,20 @@ export const LogsTable: React.FC<LogsTableProps> = ({ logs, onClearFilters }) =>
                       {log.status}
                     </span>
                     <time
-                      dateTime={log.timestamp}
-                      title={`Dispatched: ${new Date(log.timestamp).toLocaleString('en-US', {
-                        dateStyle: 'full',
-                        timeStyle: 'medium',
-                      })}`}
-                      className="block text-[11px] font-normal text-[#525866]"
+                      dateTime={statusDateTime.datetime}
+                      title={statusDateTime.title}
+                      className="block min-w-0 text-[11px] font-normal text-[#525866]"
                     >
-                      {formatLogTimestamp(log.timestamp)}
+                      <span className="block">{statusDateTime.dateLine}</span>
+                      {statusDateTime.timeLine ? (
+                        <span className="mt-0.5 block">{statusDateTime.timeLine}</span>
+                      ) : null}
                     </time>
                   </div>
                 </td>
               </tr>
-            ))}
+            );
+            })}
           </tbody>
         </table>
       </div>

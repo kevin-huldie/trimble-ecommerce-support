@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { ActivityLogRecord, LogDeliveryStatus } from '../data/mockLogs';
+import { releaseStageToSlug, type ReleaseStageSlug } from '../utils/sandboxReleaseStage';
 import type { ProductHorizon } from './HorizonContext';
 
 export type FeatureScopeId =
@@ -150,6 +151,87 @@ export function useSandbox(): SandboxContextValue {
     throw new Error('useSandbox must be used within a SandboxProvider');
   }
   return ctx;
+}
+
+export function isStage1Mvp(releaseStage: ReleaseStage): boolean {
+  return releaseStage === 'Stage 1: MVP';
+}
+
+export function isStage2Enhanced(releaseStage: ReleaseStage): boolean {
+  return releaseStage === 'Stage 2: Enhanced';
+}
+
+export function isStage3NorthStar(releaseStage: ReleaseStage): boolean {
+  return releaseStage === 'Stage 3: North Star';
+}
+
+/**
+ * Normalized release-stage flags for additive UI branches.
+ * Stage 3: North Star remains the default comprehensive experience (`isNorthStar` fallback).
+ */
+export type ReleaseStageViewFlags = {
+  releaseStage: ReleaseStage;
+  slug: ReleaseStageSlug;
+  isMVP: boolean;
+  isEnhanced: boolean;
+  isNorthStar: boolean;
+  showAuditJustification: boolean;
+  showStatusBadges: boolean;
+  showTriggeringEventFilter: boolean;
+  showDeliveryStatusFilter: boolean;
+  showTriggeringEventMetadata: boolean;
+  /** SendGrid Template ID — Stage 2: Enhanced and Stage 3: North Star. */
+  showSendGridTemplateId: boolean;
+  /** Account ID in Message Metadata right column (all stages). */
+  showAccountIdMetadata: boolean;
+  /** @deprecated Use {@link ReleaseStageViewFlags.showAccountIdMetadata}. */
+  showMvpAccountIdMetadata: boolean;
+  /** Stage 1: MVP — simplified sidebar / advanced filters. */
+  useMvpActivityLogsTable: boolean;
+  /** Stage 1: MVP or Stage 2: Enhanced — 3-column Recipient / Subject / Date-Time table. */
+  useCompactActivityLogsTable: boolean;
+  /** Stage 2: Enhanced — delivery status badge stacked above date/time in column 3. */
+  showStatusBadgeInCompactDateColumn: boolean;
+  useMvpAuditHistoryTable: boolean;
+};
+
+export function getReleaseStageViewFlags(releaseStage: ReleaseStage): ReleaseStageViewFlags {
+  const isMVP = isStage1Mvp(releaseStage);
+  const isEnhanced = isStage2Enhanced(releaseStage);
+  const isNorthStar = isStage3NorthStar(releaseStage) || (!isMVP && !isEnhanced);
+
+  const showAuditJustification = isEnhanced || isNorthStar;
+  const showStatusBadges = isEnhanced || isNorthStar;
+  const showTriggeringEventFilter = isEnhanced || isNorthStar;
+  const showDeliveryStatusFilter = isEnhanced || isNorthStar;
+  const showTriggeringEventMetadata = isEnhanced || isNorthStar;
+  const showSendGridTemplateId = isEnhanced || isNorthStar;
+  const showAccountIdMetadata = isMVP || isEnhanced || isNorthStar;
+
+  return {
+    releaseStage,
+    slug: releaseStageToSlug(releaseStage),
+    isMVP,
+    isEnhanced,
+    isNorthStar,
+    showAuditJustification,
+    showStatusBadges,
+    showTriggeringEventFilter,
+    showDeliveryStatusFilter,
+    showTriggeringEventMetadata,
+    showSendGridTemplateId,
+    showAccountIdMetadata,
+    showMvpAccountIdMetadata: isMVP,
+    useMvpActivityLogsTable: isMVP,
+    useCompactActivityLogsTable: isMVP || isEnhanced,
+    showStatusBadgeInCompactDateColumn: isEnhanced,
+    useMvpAuditHistoryTable: isMVP,
+  };
+}
+
+export function useReleaseStageView(): ReleaseStageViewFlags {
+  const { releaseStage } = useSandbox();
+  return useMemo(() => getReleaseStageViewFlags(releaseStage), [releaseStage]);
 }
 
 export function releaseStageToHorizon(stage: ReleaseStage): ProductHorizon {
@@ -307,14 +389,8 @@ export function supportRepCanEditCommunicationActions(repRole: RepRole): boolean
   return repRole !== 'View-Only Customer Support';
 }
 
-export function communicationActionsReadOnly(
-  repRole: RepRole,
-  releaseStage: ReleaseStage,
-): boolean {
-  if (!supportRepCanEditCommunicationActions(repRole)) {
-    return true;
-  }
-  return releaseStage === 'Stage 1: MVP';
+export function communicationActionsReadOnly(repRole: RepRole, _releaseStage: ReleaseStage): boolean {
+  return !supportRepCanEditCommunicationActions(repRole);
 }
 
 export function consentRequiredForSubmit(mode: ConsentMode): boolean {

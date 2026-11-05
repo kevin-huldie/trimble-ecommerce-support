@@ -12,10 +12,11 @@ type AuditTableProps = {
   historyLogs: AuditLog[];
   /** Source log for template filtering when audit rows lack template metadata. */
   sourceLogId?: string;
+  stage1Mvp?: boolean;
 };
 
 /** Fixed 1068px, 5-column audit history table (Modus 1.0 / MXP chrome tokens). */
-export function AuditTable({ historyLogs, sourceLogId }: AuditTableProps) {
+export function AuditTable({ historyLogs, sourceLogId, stage1Mvp = false }: AuditTableProps) {
   const { telemetryStream, deliveryStatus, templateType, featureScope } = useSandbox();
   const telemetryNotice =
     featureScope === 'DXPBK-1900' ? telemetryStreamWarning(telemetryStream) : null;
@@ -61,34 +62,71 @@ export function AuditTable({ historyLogs, sourceLogId }: AuditTableProps) {
           <table className="w-full border-collapse text-left">
             <thead>
               <tr className="border-b border-[#CBCDD6] bg-[#F1F1F6]">
-                <th className="w-[18%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
-                  Date/Time
-                </th>
-                <th className="w-[18%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
-                  Rep TID
-                </th>
-                <th className="w-[14%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
-                  Action Type
-                </th>
-                <th className="w-[20%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
-                  Recipient
-                </th>
-                <th className="w-[30%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
-                  Audit Details
-                </th>
+                {stage1Mvp ? (
+                  <>
+                    <th className="w-[22%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Rep Name
+                    </th>
+                    <th className="w-[18%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Date/Time
+                    </th>
+                    <th className="w-[14%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Action Type
+                    </th>
+                    <th className="w-[20%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Recipient
+                    </th>
+                    <th className="w-[26%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Audit Details
+                    </th>
+                  </>
+                ) : (
+                  <>
+                    <th className="w-[18%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Date/Time
+                    </th>
+                    <th className="w-[18%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Rep TID
+                    </th>
+                    <th className="w-[14%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Action Type
+                    </th>
+                    <th className="w-[20%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Recipient
+                    </th>
+                    <th className="w-[30%] whitespace-nowrap px-3 py-2.5 text-left text-[11px] font-bold uppercase tracking-wider text-[#525866]">
+                      Audit Details
+                    </th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody className="divide-y divide-[#CBCDD6] text-xs text-[#121212]">
               {filteredHistory.map((row, index) => (
                 <tr key={index} className="transition-colors hover:bg-[#F8F9FA]">
-                  <td className="px-3 py-2.5 align-top">
-                    <div className="text-xs font-bold text-[#121212]">{row.date}</div>
-                    <div className="mt-0.5 text-[10px] text-[#525866]">{row.time}</div>
-                  </td>
-                  <td className="px-3 py-2.5 align-top">
-                    <div className="text-xs font-bold text-[#121212]">{row.repId}</div>
-                    <div className="mt-0.5 text-[10px] text-[#525866]">{row.repName}</div>
-                  </td>
+                  {stage1Mvp ? (
+                    <>
+                      <td className="px-3 py-2.5 align-top">
+                        <div className="text-xs font-bold text-[#121212]">{row.repName}</div>
+                        <div className="mt-0.5 text-xs text-gray-500">{row.repEmail}</div>
+                      </td>
+                      <td className="px-3 py-2.5 align-top">
+                        <div className="text-xs font-bold text-[#121212]">{row.date}</div>
+                        <div className="mt-0.5 text-[10px] text-[#525866]">{row.time}</div>
+                      </td>
+                    </>
+                  ) : (
+                    <>
+                      <td className="px-3 py-2.5 align-top">
+                        <div className="text-xs font-bold text-[#121212]">{row.date}</div>
+                        <div className="mt-0.5 text-[10px] text-[#525866]">{row.time}</div>
+                      </td>
+                      <td className="px-3 py-2.5 align-top">
+                        <div className="text-xs font-bold text-[#121212]">{row.repId}</div>
+                        <div className="mt-0.5 text-[10px] text-[#525866]">{row.repName}</div>
+                      </td>
+                    </>
+                  )}
                   <td className="px-3 py-2.5 align-top">
                     <span
                       className={`inline-block rounded px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white ${
@@ -108,14 +146,18 @@ export function AuditTable({ historyLogs, sourceLogId }: AuditTableProps) {
                   >
                     {row.recipient}
                   </td>
-                  <td className="px-3 py-2.5 align-top text-xs text-[#121212]">
-                    <div className="font-semibold text-[#121212]">{row.justification || '—'}</div>
-                    {row.notes && row.notes !== '—' && (
-                      <div className="mt-0.5 break-words text-[11px] italic text-[#525866]">
-                        Note: {row.notes}
-                      </div>
-                    )}
-                  </td>
+                  {stage1Mvp ? (
+                    <MvpAuditDetailsCell internalAuditNote={row.notes} />
+                  ) : (
+                    <td className="px-3 py-2.5 align-top text-xs text-[#121212]">
+                      <div className="font-semibold text-[#121212]">{row.justification || '—'}</div>
+                      {row.notes && row.notes !== '—' ? (
+                        <div className="mt-0.5 break-words text-[11px] italic text-[#525866]">
+                          Note: {row.notes}
+                        </div>
+                      ) : null}
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -129,6 +171,23 @@ export function AuditTable({ historyLogs, sourceLogId }: AuditTableProps) {
         </p>
       )}
     </div>
+  );
+}
+
+function MvpAuditDetailsCell({ internalAuditNote }: { internalAuditNote: string }) {
+  const note = internalAuditNote.trim();
+  if (note) {
+    return (
+      <td className="px-4 py-3 align-top text-xs text-gray-800">
+        <span className="block break-words">{note}</span>
+      </td>
+    );
+  }
+  return (
+    <td className="px-4 py-3 align-top text-xs text-gray-400">
+      <span aria-hidden="true">—</span>
+      <span className="sr-only">No internal audit note recorded</span>
+    </td>
   );
 }
 

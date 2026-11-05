@@ -14,7 +14,14 @@ export const SANDBOX_ACTIVITY_LOG_ERRORS = [
   'filter-zero',
 ] as const;
 
-export const SANDBOX_DETAILS_ERRORS = ['recipient-inline'] as const;
+export const SANDBOX_DETAILS_ERRORS = [
+  'recipient-inline',
+  'justification-missing',
+  'subject-missing',
+] as const;
+
+/** Locked To address on Resend / Reply when `simError=recipient-inline`. */
+export const RECIPIENT_INLINE_READONLY_TO_EMAIL = 'john.doe@mail.com';
 
 /** Sample To / CC / BCC chips for `simError=recipient-inline`. */
 export const RECIPIENT_INLINE_SAMPLE_CHIPS = [
@@ -87,6 +94,83 @@ export type ActivityLogsSandboxErrorPreset = {
 };
 
 /** Pre-configured filters / UI for activity logs error simulations. */
+export type CommunicationActionsSandboxPreset = {
+  activeAction: 'resend' | 'reply' | 'forward';
+  showCcBcc: boolean;
+  forwardTo: string;
+  ccRecipients: string;
+  bccRecipients: string;
+  auditJustification: string;
+  subjectLine: string;
+  submitAttempted: boolean;
+  subjectTouched: boolean;
+};
+
+function defaultSubjectForSandboxAction(
+  action: CommunicationActionsSandboxPreset['activeAction'],
+  originalSubject: string,
+): string {
+  switch (action) {
+    case 'reply':
+      return `Re: ${originalSubject}`;
+    case 'forward':
+      return `Fwd: ${originalSubject}`;
+    default:
+      return `Resend: ${originalSubject}`;
+  }
+}
+
+/** Pre-configured Communication Actions UI for Email Details sandbox error simulations. */
+export function communicationActionsSandboxPreset(
+  error: SandboxDetailsError,
+  originalSubject: string,
+): CommunicationActionsSandboxPreset {
+  switch (error) {
+    case 'recipient-inline': {
+      const sampleText = RECIPIENT_INLINE_SAMPLE_CHIPS.map((c) => c.address).join(', ');
+      return {
+        activeAction: 'resend',
+        showCcBcc: true,
+        forwardTo: sampleText,
+        ccRecipients: sampleText,
+        bccRecipients: sampleText,
+        auditJustification: '',
+        subjectLine: defaultSubjectForSandboxAction('resend', originalSubject),
+        submitAttempted: true,
+        subjectTouched: false,
+      };
+    }
+    case 'justification-missing':
+      return {
+        activeAction: 'resend',
+        showCcBcc: true,
+        forwardTo: '',
+        ccRecipients: '',
+        bccRecipients: '',
+        auditJustification: '',
+        subjectLine: defaultSubjectForSandboxAction('resend', originalSubject),
+        submitAttempted: true,
+        subjectTouched: false,
+      };
+    case 'subject-missing':
+      return {
+        activeAction: 'reply',
+        showCcBcc: true,
+        forwardTo: '',
+        ccRecipients: '',
+        bccRecipients: '',
+        auditJustification: '',
+        subjectLine: '',
+        submitAttempted: true,
+        subjectTouched: true,
+      };
+    default: {
+      const exhaustive: never = error;
+      return exhaustive;
+    }
+  }
+}
+
 export function activityLogsSandboxErrorPreset(
   error: SandboxActivityLogError,
 ): ActivityLogsSandboxErrorPreset {

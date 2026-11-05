@@ -24,6 +24,7 @@ export type SearchToolbarProps = {
   filtersOpen: boolean;
   onFiltersOpenChange: (open: boolean) => void;
   activeFilterBarVisible?: boolean;
+  stage1Mvp?: boolean;
 };
 
 const ADVANCED_FILTERS_DRAWER_ID = 'advanced-filters-drawer';
@@ -36,6 +37,7 @@ export function SearchToolbar({
   filtersOpen,
   onFiltersOpenChange,
   activeFilterBarVisible = false,
+  stage1Mvp = false,
 }: SearchToolbarProps) {
   const [searchParams] = useSearchParams();
   const simError = readSandboxSimError(searchParams);
@@ -206,6 +208,7 @@ export function SearchToolbar({
             endDateError={advancedErrors.endDateError}
             orderIdError={advancedErrors.orderIdError}
             onRecipientEmailBlur={() => undefined}
+            stage1Mvp={stage1Mvp}
           />
         </div>
       ) : null}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import {
   ActivityLogsSidebar,
@@ -31,6 +31,7 @@ import { SandboxTelemetryBanner } from '../components/SandboxTelemetryBanner';
 import {
   logMatchesSandboxDelivery,
   logMatchesSandboxTemplate,
+  useReleaseStageView,
   useSandbox,
 } from '../context/SandboxContext';
 import {
@@ -44,7 +45,10 @@ const DEFAULT_PAGE_SIZE = 20;
 
 export function ActivityLogsPage() {
   const { deliveryStatus, templateType, featureScope } = useSandbox();
+  const releaseStageView = useReleaseStageView();
+  const stage1Mvp = releaseStageView.isMVP;
   const [searchParams] = useSearchParams();
+
   const [filters, setFilters] = useState<ActivityLogFilters>(DEFAULT_ACTIVITY_LOG_FILTERS);
   const [activeNav, setActiveNav] = useState<SidebarNavId>('all-logs');
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -53,6 +57,22 @@ export function ActivityLogsPage() {
   const [refreshKey, setRefreshKey] = useState(0);
 
   const sandboxSimError = readSandboxSimError(searchParams);
+  const wasStage1MvpRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    const wasMvp = wasStage1MvpRef.current;
+    if (wasMvp !== null && stage1Mvp && !wasMvp) {
+      setActiveNav('all-logs');
+      setFilters((prev) => ({
+        ...prev,
+        eventCategory: '',
+        deliveryStatus: '' as LogDeliveryStatus | '',
+        resendHistoryOnly: false,
+        triggeringEvent: '',
+      }));
+    }
+    wasStage1MvpRef.current = stage1Mvp;
+  }, [stage1Mvp]);
 
   useEffect(() => {
     if (!isSandboxActivityLogError(sandboxSimError)) {
@@ -186,6 +206,7 @@ export function ActivityLogsPage() {
               onNavChange={handleSidebarNav}
               bouncedCount={bouncedCount}
               deferredCount={deferredCount}
+              stage1Mvp={stage1Mvp}
             />
           </aside>
 
@@ -210,6 +231,7 @@ export function ActivityLogsPage() {
               filtersOpen={filtersOpen}
               onFiltersOpenChange={setFiltersOpen}
               activeFilterBarVisible={showActiveFilterBanner}
+              stage1Mvp={stage1Mvp}
             />
 
             <section aria-label="Email activity results" className="flex min-w-0 flex-col gap-0">
@@ -227,7 +249,11 @@ export function ActivityLogsPage() {
                     onPrevPage={() => setPage((p) => Math.max(1, p - 1))}
                     onNextPage={() => setPage((p) => Math.min(totalPages, p + 1))}
                   />
-                  <LogsTable logs={paginatedLogs.map(activityLogToEmailLog)} />
+                  <LogsTable
+                    logs={paginatedLogs.map(activityLogToEmailLog)}
+                    compactLayout={releaseStageView.useCompactActivityLogsTable}
+                    showStatusInDateColumn={releaseStageView.showStatusBadgeInCompactDateColumn}
+                  />
                   <LogsPaginationFooter
                     page={safePage}
                     pageSize={pageSize}

@@ -7,7 +7,11 @@ import { CommunicationActionsPanel } from '../components/log-details/Communicati
 import { LogDetailsHeaderSection } from '../components/log-details/LogDetailsHeaderSection';
 import { MessageMetadataSection } from '../components/log-details/MessageMetadataSection';
 import { PortalShell } from '../components/PortalShell';
-import { communicationActionsReadOnly, useSandbox } from '../context/SandboxContext';
+import {
+  communicationActionsReadOnly,
+  useReleaseStageView,
+  useSandbox,
+} from '../context/SandboxContext';
 import { getActivityLogById, mockLogs } from '../data/mockLogs';
 import { formatCommunicationSuccessToastMessage } from '../utils/successToastMessages';
 import {
@@ -20,6 +24,7 @@ const TOAST_DURATION_MS = 4000;
 
 export function LogDetailsPage() {
   const { repRole, releaseStage } = useSandbox();
+  const releaseStageView = useReleaseStageView();
   const actionsReadOnly = communicationActionsReadOnly(repRole, releaseStage);
   const { logId } = useParams<{ logId: string }>();
   const log = logId ? getActivityLogById(logId) || mockLogs[0] : mockLogs[0];
@@ -55,14 +60,28 @@ export function LogDetailsPage() {
     <PortalShell hideSidebar>
       <div className="mx-auto min-h-screen max-w-6xl space-y-6 bg-white px-8 py-6 text-[#121212]">
         <LogDetailsHeaderSection log={log} />
-        <MessageMetadataSection log={log} onSuccessToast={setToastMessage} />
+        <MessageMetadataSection
+          log={log}
+          onSuccessToast={setToastMessage}
+          isStage1Mvp={releaseStageView.isMVP}
+          showAccountId={releaseStageView.showAccountIdMetadata}
+          showSystemTelemetry={
+            releaseStageView.showTriggeringEventMetadata &&
+            releaseStageView.showSendGridTemplateId
+          }
+        />
         <ArchivedMessageSnapshotPanel log={log} />
 
-        <AuditTable historyLogs={historyLogs} sourceLogId={log.id} />
+        <AuditTable
+          historyLogs={historyLogs}
+          sourceLogId={log.id}
+          stage1Mvp={releaseStageView.useMvpAuditHistoryTable}
+        />
 
         <CommunicationActionsPanel
           log={log}
           readOnly={actionsReadOnly}
+          showAuditJustification={releaseStageView.showAuditJustification}
           onCommunicationLogged={handleCommunicationLogged}
         />
       </div>

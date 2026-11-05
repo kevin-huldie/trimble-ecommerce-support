@@ -1,17 +1,25 @@
-import { useCallback, useState, type FC } from 'react';
+import { useCallback, useEffect, useState, type FC } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   FEATURE_SCOPE_DXBK_1900_LABEL,
   PURCHASE_TYPE_LABEL,
   REP_ROLE_LABEL,
+  getReleaseStageViewFlags,
   useSandbox,
   type ReleaseStage,
 } from '../context/SandboxContext';
 import {
   readSandboxSimError,
+  SANDBOX_LEGACY_ERROR_PARAM,
+  SANDBOX_SIM_ERROR_PARAM,
   sandboxErrorNavigationPath,
   type SandboxErrorState,
 } from '../utils/sandboxErrorDeepLink';
+import {
+  releaseStageFromUrlParam,
+  releaseStageToUrlParam,
+  SANDBOX_STAGE_PARAM,
+} from '../utils/sandboxReleaseStage';
 
 export type {
   SandboxErrorQueryValue,
@@ -147,7 +155,15 @@ function Dxpbk1900FeatureControls({
           </optgroup>
           <optgroup label="Email Details & Actions">
             <option value="recipient-inline" style={RELEASE_STAGE_OPTION_STYLE}>
-              Forward Email: To / CC / BCC Inline Errors
+              To / CC / BCC Inline Errors
+            </option>
+            {getReleaseStageViewFlags(releaseStage).showAuditJustification ? (
+              <option value="justification-missing" style={RELEASE_STAGE_OPTION_STYLE}>
+                Missing Audit Justification Error
+              </option>
+            ) : null}
+            <option value="subject-missing" style={RELEASE_STAGE_OPTION_STYLE}>
+              Missing Subject Line Error
             </option>
           </optgroup>
         </select>
@@ -222,15 +238,72 @@ export const ConnectedSandboxUtilityBar: FC = () => {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const { releaseStage, setReleaseStage } = useSandbox();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const currentErrorParam = readSandboxSimError(searchParams);
 
+  useEffect(() => {
+    const fromUrl = releaseStageFromUrlParam(searchParams.get(SANDBOX_STAGE_PARAM));
+    if (fromUrl && fromUrl !== releaseStage) {
+      setReleaseStage(fromUrl);
+    }
+  }, [searchParams, releaseStage, setReleaseStage]);
+
+  const clearSimErrorFromUrl = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete(SANDBOX_SIM_ERROR_PARAM);
+        next.delete(SANDBOX_LEGACY_ERROR_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  const handleReleaseStageChange = useCallback(
+    (stage: ReleaseStage) => {
+      setReleaseStage(stage);
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set(SANDBOX_STAGE_PARAM, releaseStageToUrlParam(stage));
+          if (
+            getReleaseStageViewFlags(stage).isMVP
+            && readSandboxSimError(prev) === 'justification-missing'
+          ) {
+            next.delete(SANDBOX_SIM_ERROR_PARAM);
+            next.delete(SANDBOX_LEGACY_ERROR_PARAM);
+          }
+          return next;
+        },
+        { replace: true },
+      );
+    },
+    [setReleaseStage, setSearchParams],
+  );
+
+  useEffect(() => {
+    if (
+      getReleaseStageViewFlags(releaseStage).isMVP
+      && currentErrorParam === 'justification-missing'
+    ) {
+      clearSimErrorFromUrl();
+    }
+  }, [releaseStage, currentErrorParam, clearSimErrorFromUrl]);
+
   const handleErrorStateNavigation = useCallback(
     (value: string) => {
-      navigate(sandboxErrorNavigationPath(value));
+      const path = sandboxErrorNavigationPath(value);
+      const stageParam = releaseStageToUrlParam(releaseStage);
+      if (value === 'none') {
+        navigate(path);
+        return;
+      }
+      const separator = path.includes('?') ? '&' : '?';
+      navigate(`${path}${separator}${SANDBOX_STAGE_PARAM}=${encodeURIComponent(stageParam)}`);
     },
-    [navigate],
+    [navigate, releaseStage],
   );
 
   return (
@@ -238,7 +311,7 @@ export const ConnectedSandboxUtilityBar: FC = () => {
       isCollapsed={isCollapsed}
       onToggleCollapsed={() => setIsCollapsed((prev) => !prev)}
       releaseStage={releaseStage}
-      onReleaseStageChange={setReleaseStage}
+      onReleaseStageChange={handleReleaseStageChange}
       currentErrorParam={currentErrorParam}
       onErrorStateNavigation={handleErrorStateNavigation}
     />

@@ -20,6 +20,8 @@ export type LogsFilterModalProps = {
   endDateError?: string | null;
   onRecipientEmailBlur?: () => void;
   orderIdError?: string | null;
+  /** Stage 1: MVP — recipient, customer, order id, and date range only. */
+  stage1Mvp?: boolean;
 };
 
 const NEUTRAL_FIELD_BORDER = 'border-[#C2C8D0]';
@@ -349,6 +351,7 @@ function DatePickerField({
   value,
   errorMessage,
   errorMessageId,
+  helpTextId,
   isOpen,
   onOpenChange,
   onChange,
@@ -358,12 +361,15 @@ function DatePickerField({
   value: string;
   errorMessage?: string | null;
   errorMessageId: string;
+  helpTextId?: string;
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onChange: (iso: string) => void;
 }) {
   const anchorRef = useRef<HTMLDivElement>(null);
   const invalid = Boolean(errorMessage);
+  const describedBy =
+    [helpTextId, invalid ? errorMessageId : undefined].filter(Boolean).join(' ') || undefined;
 
   useEffect(() => {
     if (!isOpen) return undefined;
@@ -394,7 +400,7 @@ function DatePickerField({
           readOnly
           value={value}
           aria-invalid={invalid || undefined}
-          aria-describedby={invalid ? errorMessageId : undefined}
+          aria-describedby={describedBy}
           aria-expanded={isOpen}
           aria-haspopup="dialog"
           className={[
@@ -483,6 +489,7 @@ function DateRangeSection({
           value={startDate}
           errorMessage={startDateError}
           errorMessageId={START_DATE_ERROR_ID}
+          helpTextId={helpId}
           isOpen={isStartDateOpen}
           onOpenChange={openStartDate}
           onChange={onStartDateChange}
@@ -493,13 +500,14 @@ function DateRangeSection({
           value={endDate}
           errorMessage={endDateError}
           errorMessageId={END_DATE_ERROR_ID}
+          helpTextId={helpId}
           isOpen={isEndDateOpen}
           onOpenChange={openEndDate}
           onChange={onEndDateChange}
         />
       </div>
 
-      <p id={helpId} className="mt-1 text-[11px] text-[#525866]">
+      <p id={helpId} className="mt-2 text-xs leading-snug text-[#525866]">
         Dates are queried in UTC and displayed in your local browser timezone (EDT).
       </p>
     </div>
@@ -517,6 +525,7 @@ export function LogsFilterModal({
   endDateError,
   onRecipientEmailBlur,
   orderIdError,
+  stage1Mvp = false,
 }: LogsFilterModalProps) {
   const patch = (partial: Partial<AdvancedFilterFields>) => {
     onChange({ ...values, ...partial });
@@ -559,22 +568,36 @@ export function LogsFilterModal({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <DangerTextInput
-            id={`${id}-order-id`}
-            label="Order ID"
-            value={values.orderId}
-            placeholder="Enter order ID"
-            errorMessage={orderIdError}
-            errorMessageId={ORDER_ID_ERROR_ID}
-            onChange={(orderId) => patch({ orderId })}
-          />
-          <TriggeringEventSelect
-            id={`${id}-triggering-event`}
-            value={values.triggeringEvent}
-            onChange={(triggeringEvent) => patch({ triggeringEvent })}
-          />
-        </div>
+        {stage1Mvp ? (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <DangerTextInput
+              id={`${id}-order-id`}
+              label="Order ID"
+              value={values.orderId}
+              placeholder="Enter order ID"
+              errorMessage={orderIdError}
+              errorMessageId={ORDER_ID_ERROR_ID}
+              onChange={(orderId) => patch({ orderId })}
+            />
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <DangerTextInput
+              id={`${id}-order-id`}
+              label="Order ID"
+              value={values.orderId}
+              placeholder="Enter order ID"
+              errorMessage={orderIdError}
+              errorMessageId={ORDER_ID_ERROR_ID}
+              onChange={(orderId) => patch({ orderId })}
+            />
+            <TriggeringEventSelect
+              id={`${id}-triggering-event`}
+              value={values.triggeringEvent}
+              onChange={(triggeringEvent) => patch({ triggeringEvent })}
+            />
+          </div>
+        )}
 
         <DateRangeSection
           formId={id}
@@ -586,10 +609,12 @@ export function LogsFilterModal({
           onEndDateChange={(dateTo) => patch({ dateTo })}
         />
 
-        <DeliveryStatusToggle
-          value={values.deliveryStatus}
-          onChange={(deliveryStatus) => patch({ deliveryStatus })}
-        />
+        {stage1Mvp ? null : (
+          <DeliveryStatusToggle
+            value={values.deliveryStatus}
+            onChange={(deliveryStatus) => patch({ deliveryStatus })}
+          />
+        )}
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
