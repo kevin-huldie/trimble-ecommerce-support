@@ -1,12 +1,14 @@
 import { useCallback, useId, useMemo, useState } from 'react';
-import { X } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 import { isValidEmailAddress, parseEmailListInput } from '../utils/emailValidation';
-import { InlineFieldError } from './InlineFieldError';
 
 export type RecipientChipModel = {
   address: string;
   valid: boolean;
 };
+
+export const RECIPIENT_CHIP_INLINE_ERROR_MESSAGE =
+  'Invalid email address. Ensure domain includes a valid extension (e.g., name@company.com).';
 
 type RecipientChipInputProps = {
   label: string;
@@ -16,6 +18,8 @@ type RecipientChipInputProps = {
   disabled?: boolean;
   required?: boolean;
   inputId?: string;
+  /** Defaults to `{inputId}-error-msg`. */
+  errorMessageId?: string;
   invalidListMessage?: string;
   externalInvalid?: boolean;
   externalErrorMessage?: string;
@@ -29,13 +33,14 @@ export function RecipientChipInput({
   disabled = false,
   required = false,
   inputId: inputIdProp,
-  invalidListMessage = 'Invalid email address in CC/BCC list.',
+  errorMessageId: errorMessageIdProp,
+  invalidListMessage = RECIPIENT_CHIP_INLINE_ERROR_MESSAGE,
   externalInvalid = false,
   externalErrorMessage,
 }: RecipientChipInputProps) {
   const generatedId = useId();
   const fieldId = inputIdProp ?? generatedId;
-  const errorId = `${fieldId}-error`;
+  const errorMessageId = errorMessageIdProp ?? `${fieldId}-error-msg`;
   const [draft, setDraft] = useState('');
 
   const hasInvalidChips = useMemo(() => chips.some((c) => !c.valid), [chips]);
@@ -68,8 +73,9 @@ export function RecipientChipInput({
     onChipsChange(chips.filter((c) => c.address !== address));
   };
 
-  const containerErrorMessage = externalErrorMessage
-    ?? (hasInvalidChips ? invalidListMessage : undefined);
+  const containerErrorMessage = hasInvalidChips
+    ? invalidListMessage
+    : externalErrorMessage;
 
   return (
     <div className="flex w-full min-w-0 flex-col gap-1">
@@ -79,33 +85,38 @@ export function RecipientChipInput({
       </label>
       <div
         className={[
-          'flex min-h-10 w-full min-w-0 flex-wrap items-center gap-1.5 rounded border bg-white px-2 py-1.5',
-          containerInvalid ? 'border-[#DA212C]' : 'border-[#CBCDD6]',
+          'flex min-h-10 w-full min-w-0 flex-wrap items-center gap-1.5 rounded bg-white px-2 py-1.5',
+          containerInvalid
+            ? 'border border-[#A81E1E] focus-within:border-[#A81E1E] focus-within:ring-1 focus-within:ring-[#A81E1E]'
+            : 'border border-[#CBCDD6] focus-within:border-[#0063A3] focus-within:ring-1 focus-within:ring-[#0063A3]',
           disabled ? 'cursor-not-allowed bg-[#F1F1F6] text-[#121212]' : '',
         ].join(' ')}
       >
         {chips.map((chip) => (
           <span
             key={chip.address}
-            className={[
-              'inline-flex max-w-full items-center gap-1 rounded px-2 py-0.5 text-xs',
+            className={
               chip.valid
-                ? 'border border-[#0063A3] bg-[#E5F1F8] text-[#121212]'
-                : 'border border-[#DA212C] bg-[#FDF2F2] text-[#DA212C]',
-            ].join(' ')}
+                ? 'inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#CED4DA] bg-[#E9ECEF] px-2.5 py-1 text-xs text-[#212529]'
+                : 'inline-flex max-w-full items-center gap-1.5 rounded-full border border-[#A81E1E] bg-[#FDE7E7] px-2.5 py-1 text-xs font-medium text-[#A81E1E]'
+            }
           >
+            {!chip.valid ? (
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            ) : null}
             <span className="truncate">{chip.address}</span>
             {!disabled ? (
               <button
                 type="button"
                 aria-label={`Remove ${chip.address}`}
-                className={[
-                  'rounded p-0.5 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3]',
-                  chip.valid ? 'text-[#525866] hover:text-[#121212]' : 'text-[#DA212C]',
-                ].join(' ')}
+                className={
+                  chip.valid
+                    ? 'cursor-pointer rounded p-0.5 hover:text-red-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3]'
+                    : 'cursor-pointer rounded p-0.5 text-[#A81E1E] hover:text-red-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3]'
+                }
                 onClick={() => removeChip(chip.address)}
               >
-                <X className="h-3.5 w-3.5" aria-hidden />
+                <span aria-hidden="true">✕</span>
               </button>
             ) : null}
           </span>
@@ -117,7 +128,7 @@ export function RecipientChipInput({
             value={draft}
             placeholder={chips.length === 0 ? placeholder : ''}
             aria-invalid={containerInvalid || undefined}
-            aria-describedby={containerErrorMessage ? errorId : undefined}
+            aria-describedby={containerErrorMessage ? errorMessageId : undefined}
             className="min-w-[8rem] flex-1 border-0 bg-transparent py-0.5 text-xs text-[#121212] placeholder:text-[#525866] focus:outline-none focus:ring-0"
             onChange={(e) => setDraft(e.target.value)}
             onBlur={() => commitDraft(draft)}
@@ -135,7 +146,14 @@ export function RecipientChipInput({
         ) : null}
       </div>
       {containerErrorMessage ? (
-        <InlineFieldError id={errorId} message={containerErrorMessage} />
+        <p
+          id={errorMessageId}
+          role="alert"
+          className="mt-1 flex items-center gap-1 text-xs text-[#A81E1E]"
+        >
+          <span aria-hidden="true">⚠</span>
+          {containerErrorMessage}
+        </p>
       ) : (
         <p className="min-h-[1rem]" aria-hidden />
       )}

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ActivityLogsSidebar,
   sidebarNavToFilters,
@@ -26,17 +27,63 @@ import {
   type LogDeliveryStatus,
 } from '../data/mockLogs';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
+import { SandboxTelemetryBanner } from '../components/SandboxTelemetryBanner';
+import {
+  logMatchesSandboxDelivery,
+  logMatchesSandboxTemplate,
+  useReleaseStageView,
+  useSandbox,
+} from '../context/SandboxContext';
+import {
+  activityLogsSandboxErrorPreset,
+  isSandboxActivityLogError,
+  readSandboxSimError,
+} from '../utils/sandboxErrorDeepLink';
 
 const SEARCH_DEBOUNCE_MS = 250;
 const DEFAULT_PAGE_SIZE = 20;
 
 export function ActivityLogsPage() {
+  const { deliveryStatus, templateType, featureScope } = useSandbox();
+  const releaseStageView = useReleaseStageView();
+  const stage1Mvp = releaseStageView.isMVP;
+  const [searchParams] = useSearchParams();
+
   const [filters, setFilters] = useState<ActivityLogFilters>(DEFAULT_ACTIVITY_LOG_FILTERS);
   const [activeNav, setActiveNav] = useState<SidebarNavId>('all-logs');
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
   const [refreshKey, setRefreshKey] = useState(0);
+
+  const sandboxSimError = readSandboxSimError(searchParams);
+  const wasStage1MvpRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    const wasMvp = wasStage1MvpRef.current;
+    if (wasMvp !== null && stage1Mvp && !wasMvp) {
+      setActiveNav('all-logs');
+      setFilters((prev) => ({
+        ...prev,
+        eventCategory: '',
+        deliveryStatus: '' as LogDeliveryStatus | '',
+        resendHistoryOnly: false,
+        triggeringEvent: '',
+      }));
+    }
+    wasStage1MvpRef.current = stage1Mvp;
+  }, [stage1Mvp]);
+
+  useEffect(() => {
+    if (!isSandboxActivityLogError(sandboxSimError)) {
+      return;
+    }
+    const { filtersPatch, filtersOpen: openDrawer } =
+      activityLogsSandboxErrorPreset(sandboxSimError);
+    setFilters((prev) => ({ ...prev, ...filtersPatch }));
+    setFiltersOpen(openDrawer);
+    setPage(1);
+  }, [sandboxSimError]);
 
   const debouncedSearch = useDebouncedValue(filters.searchQuery, SEARCH_DEBOUNCE_MS);
 
@@ -45,10 +92,17 @@ export function ActivityLogsPage() {
     [filters, debouncedSearch],
   );
 
-  const filteredLogs = useMemo(
-    () => filterActivityLogs(MOCK_ACTIVITY_LOGS, effectiveFilters),
-    [effectiveFilters, refreshKey],
-  );
+  const filteredLogs = useMemo(() => {
+    const base = filterActivityLogs(MOCK_ACTIVITY_LOGS, effectiveFilters);
+    if (featureScope !== 'DXPBK-1900') {
+      return base;
+    }
+    return base.filter(
+      (log) =>
+        logMatchesSandboxDelivery(log, deliveryStatus)
+        && logMatchesSandboxTemplate(log, templateType),
+    );
+  }, [effectiveFilters, refreshKey, featureScope, deliveryStatus, templateType]);
 
   const bouncedCount = useMemo(
     () => countLogsByDeliveryStatus(MOCK_ACTIVITY_LOGS, 'Bounced'),
@@ -152,6 +206,7 @@ export function ActivityLogsPage() {
               onNavChange={handleSidebarNav}
               bouncedCount={bouncedCount}
               deferredCount={deferredCount}
+              stage1Mvp={stage1Mvp}
             />
           </aside>
 
@@ -176,11 +231,13 @@ export function ActivityLogsPage() {
               filtersOpen={filtersOpen}
               onFiltersOpenChange={setFiltersOpen}
               activeFilterBarVisible={showActiveFilterBanner}
+              stage1Mvp={stage1Mvp}
             />
 
             <section aria-label="Email activity results" className="flex min-w-0 flex-col gap-0">
               {totalCount > 0 ? (
                 <div className="flex flex-col gap-0 overflow-visible rounded border border-[#CBCDD6] bg-white shadow-sm">
+                  <SandboxTelemetryBanner />
                   {activeFilterBanner}
                   <TableSummaryToolbar
                     totalCount={totalCount}
@@ -192,7 +249,11 @@ export function ActivityLogsPage() {
                     onPrevPage={() => setPage((p) => Math.max(1, p - 1))}
                     onNextPage={() => setPage((p) => Math.min(totalPages, p + 1))}
                   />
-                  <LogsTable logs={paginatedLogs.map(activityLogToEmailLog)} />
+                  <LogsTable
+                    logs={paginatedLogs.map(activityLogToEmailLog)}
+                    compactLayout={releaseStageView.useCompactActivityLogsTable}
+                    showStatusInDateColumn={releaseStageView.showStatusBadgeInCompactDateColumn}
+                  />
                   <LogsPaginationFooter
                     page={safePage}
                     pageSize={pageSize}
