@@ -1,4 +1,9 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
+import {
+  horizonToReleaseStage,
+  releaseStageToHorizon,
+  useSandbox,
+} from './SandboxContext';
 
 export type ProductHorizon = 'H1' | 'H2' | 'H3';
 
@@ -7,22 +12,17 @@ type HorizonContextValue = {
   setHorizon: (horizon: ProductHorizon) => void;
 };
 
-const HorizonContext = createContext<HorizonContextValue | null>(null);
-
+/** @deprecated Use `SandboxProvider` and `useSandbox` release stage instead. */
 export function HorizonProvider({ children }: { children: ReactNode }) {
-  const [horizon, setHorizon] = useState<ProductHorizon>('H1');
-
-  const value = useMemo(() => ({ horizon, setHorizon }), [horizon]);
-
-  return <HorizonContext.Provider value={value}>{children}</HorizonContext.Provider>;
+  return children;
 }
 
 export function useHorizon(): HorizonContextValue {
-  const ctx = useContext(HorizonContext);
-  if (!ctx) {
-    throw new Error('useHorizon must be used within a HorizonProvider');
-  }
-  return ctx;
+  const { releaseStage, setReleaseStage } = useSandbox();
+  return {
+    horizon: releaseStageToHorizon(releaseStage),
+    setHorizon: (horizon) => setReleaseStage(horizonToReleaseStage(horizon)),
+  };
 }
 
 export function horizonLevel(horizon: ProductHorizon): number {
