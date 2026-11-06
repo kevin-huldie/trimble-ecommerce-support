@@ -10,16 +10,25 @@ import type { ActivityLogRecord, LogDeliveryStatus } from '../data/mockLogs';
 import { releaseStageToSlug, type ReleaseStageSlug } from '../utils/sandboxReleaseStage';
 import type { ProductHorizon } from './HorizonContext';
 
-export type FeatureScopeId =
-  | 'DXPBK-1900'
-  | 'DXPBK-2100'
-  | 'DXPBK-2101'
-  | 'DXPBK-2102'
-  | 'DXPBK-2103'
-  | 'DXPBK-2104'
-  | 'DXPBK-2105';
+/** Primary comparison scope: role-gated prototype vs. activity-logs refinement. */
+export type FeatureScope = 'DXPBK-2123' | 'DXPBK-1900';
 
-/** Primary-row support rep role simulation (matches `rep-role` select options). */
+/** @deprecated Use {@link FeatureScope}. */
+export type FeatureScopeId = FeatureScope;
+
+export type ReleaseStage = 'stage1-mvp' | 'stage2-enhanced' | 'stage3-northstar';
+
+export type SupportRoleType =
+  | 'admin'
+  | 'customer-support'
+  | 'enhanced-cs'
+  | 'epayments-cs'
+  | 'epayments-team'
+  | 'general-cs'
+  | 'view-only-cs'
+  | 'unassigned';
+
+/** Primary-row support rep role labels (communication actions / read-only). */
 export type RepRole =
   | 'View-Only Customer Support'
   | 'General Customer Support'
@@ -30,21 +39,122 @@ export type RepRole =
 /** @deprecated Use `RepRole`. */
 export type SandboxRole = RepRole;
 
-/** Fixed primary-row purchase type (read-only in the utility bar). */
-export type PurchaseType = 'SaaS Subscription';
+export type PurchaseType = 'saas-subscription' | 'physical-hardware' | 'perpetual-license';
 
-export const FEATURE_SCOPE_DXBK_1900_LABEL =
-  'DXPBK-1900 | Establish Repository for All Customer Emails';
+export interface RoleDefinition {
+  id: SupportRoleType;
+  label: string;
+  allowedTiles: string[];
+}
 
-export const PURCHASE_TYPE_LABEL: PurchaseType = 'SaaS Subscription';
+/**
+ * Home portal tiles (`HomePage`), task-frequency order — single source of truth for RBAC ids.
+ */
+export const PORTAL_OPERATIONAL_TILE_IDS: readonly string[] = [
+  'order-details',
+  'cancel-orders',
+  'refund-orders',
+  'process-returns',
+  'release-holds',
+  'tax-exemption-holds',
+  'chargebacks',
+  'failed-orders',
+  'generate-report',
+  'product-upload',
+  'promo-code-upload',
+  'role-management',
+] as const;
 
-export const REP_ROLE_LABEL: RepRole = 'General Customer Support';
+export const PORTAL_OPERATIONAL_TILE_COUNT = PORTAL_OPERATIONAL_TILE_IDS.length;
 
-/** DXPBK-1900 secondary row — release stage (`feature-release-stage`). */
-export type ReleaseStage =
-  | 'Stage 1: MVP'
-  | 'Stage 2: Enhanced'
-  | 'Stage 3: North Star';
+export const ROLE_DEFINITIONS: Record<SupportRoleType, RoleDefinition> = {
+  admin: {
+    id: 'admin',
+    label: 'Administrator',
+    allowedTiles: ['failed-orders', 'role-management'],
+  },
+  'customer-support': {
+    id: 'customer-support',
+    label: 'Customer Support',
+    allowedTiles: [
+      'order-details',
+      'cancel-orders',
+      'refund-orders',
+      'process-returns',
+      'release-holds',
+      'tax-exemption-holds',
+      'generate-report',
+    ],
+  },
+  'enhanced-cs': {
+    id: 'enhanced-cs',
+    label: 'Enhanced Customer Support',
+    allowedTiles: ['product-upload', 'promo-code-upload'],
+  },
+  'epayments-cs': {
+    id: 'epayments-cs',
+    label: 'E-Payments Customer Support',
+    allowedTiles: ['chargebacks'],
+  },
+  'epayments-team': {
+    id: 'epayments-team',
+    label: 'E-Payments Team',
+    allowedTiles: ['order-details', 'chargebacks'],
+  },
+  'general-cs': {
+    id: 'general-cs',
+    label: 'General Customer Support',
+    allowedTiles: [
+      'cancel-orders',
+      'refund-orders',
+      'process-returns',
+      'release-holds',
+      'tax-exemption-holds',
+      'generate-report',
+    ],
+  },
+  'view-only-cs': {
+    id: 'view-only-cs',
+    label: 'View-Only Customer Support',
+    allowedTiles: ['order-details'],
+  },
+  unassigned: {
+    id: 'unassigned',
+    label: 'Unassigned',
+    allowedTiles: [],
+  },
+};
+
+export function getVisibleOperationalTileIds(
+  featureScope: FeatureScope,
+  activeRole: SupportRoleType,
+): string[] {
+  if (featureScope === 'DXPBK-1900') {
+    return [...PORTAL_OPERATIONAL_TILE_IDS];
+  }
+  const def = ROLE_DEFINITIONS[activeRole];
+  if (!def || def.allowedTiles.length === 0) {
+    return [];
+  }
+  const allowed = new Set(def.allowedTiles);
+  return PORTAL_OPERATIONAL_TILE_IDS.filter((id) => allowed.has(id));
+}
+
+function supportRoleTypeToRepRole(role: SupportRoleType): RepRole {
+  switch (role) {
+    case 'view-only-cs':
+      return 'View-Only Customer Support';
+    case 'enhanced-cs':
+      return 'Enhanced Customer Support';
+    case 'epayments-cs':
+    case 'epayments-team':
+      return 'E-Payments Customer Support';
+    case 'admin':
+      return 'Administrator';
+    default:
+      return 'General Customer Support';
+  }
+}
 
 /** DXPBK-1900 feature control: delivery status simulation. */
 export type SandboxDeliveryStatus =
@@ -72,9 +182,9 @@ export type TelemetryStream =
   | 'smtp-connection-503';
 
 export type SandboxState = {
-  /** Fixed prototype ticket scope (primary row is read-only). */
-  featureScope: FeatureScopeId;
-  repRole: RepRole;
+  featureScope: FeatureScope;
+  /** Support rep simulation (DXPBK-2123); exposed as `activeRole` + `repRole` (mapped label). */
+  activeRole: SupportRoleType;
   purchaseType: PurchaseType;
   releaseStage: ReleaseStage;
   deliveryStatus: SandboxDeliveryStatus;
@@ -84,18 +194,24 @@ export type SandboxState = {
 };
 
 type SandboxContextValue = SandboxState & {
+  setFeatureScope: (scope: FeatureScope) => void;
+  setActiveRole: (role: SupportRoleType) => void;
+  setPurchaseType: (value: PurchaseType) => void;
   setReleaseStage: (value: ReleaseStage) => void;
   setDeliveryStatus: (value: SandboxDeliveryStatus) => void;
   setTemplateType: (value: TemplateTypeSimulation) => void;
   setConsentMode: (value: ConsentMode) => void;
   setTelemetryStream: (value: TelemetryStream) => void;
+  /** Same ID as `activeRole`, for log-details / communication surfaces. */
+  repRole: RepRole;
+  isTileAllowed: (tileId: string) => boolean;
 };
 
 const DEFAULT_SANDBOX_STATE: SandboxState = {
-  featureScope: 'DXPBK-1900',
-  repRole: REP_ROLE_LABEL,
-  purchaseType: PURCHASE_TYPE_LABEL,
-  releaseStage: 'Stage 1: MVP',
+  featureScope: 'DXPBK-2123',
+  activeRole: 'customer-support',
+  purchaseType: 'saas-subscription',
+  releaseStage: 'stage1-mvp',
   deliveryStatus: 'all-dispatches',
   templateType: 'all-templates',
   consentMode: 'enforce-checkbox',
@@ -107,38 +223,83 @@ const SandboxContext = createContext<SandboxContextValue | null>(null);
 export function SandboxProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<SandboxState>(DEFAULT_SANDBOX_STATE);
 
+  const setFeatureScope = useCallback((featureScope: FeatureScope) => {
+    setState((prev) => {
+      let next = { ...prev, featureScope };
+      if (featureScope === 'DXPBK-2123' && prev.releaseStage === 'stage3-northstar') {
+        next = { ...next, releaseStage: 'stage1-mvp' };
+      }
+      return next;
+    });
+  }, []);
+
+  const setActiveRole = useCallback((activeRole: SupportRoleType) => {
+    setState((prev) => ({ ...prev, activeRole }));
+  }, []);
+
+  const setPurchaseType = useCallback((purchaseType: PurchaseType) => {
+    setState((prev) => ({ ...prev, purchaseType }));
+  }, []);
+
   const setReleaseStage = useCallback((releaseStage: ReleaseStage) => {
     setState((prev) => ({ ...prev, releaseStage }));
   }, []);
+
   const setDeliveryStatus = useCallback((deliveryStatus: SandboxDeliveryStatus) => {
     setState((prev) => ({ ...prev, deliveryStatus }));
   }, []);
+
   const setTemplateType = useCallback((templateType: TemplateTypeSimulation) => {
     setState((prev) => ({ ...prev, templateType }));
   }, []);
+
   const setConsentMode = useCallback((consentMode: ConsentMode) => {
     setState((prev) => ({ ...prev, consentMode }));
   }, []);
+
   const setTelemetryStream = useCallback((telemetryStream: TelemetryStream) => {
     setState((prev) => ({ ...prev, telemetryStream }));
   }, []);
 
+  const repRole = useMemo(() => supportRoleTypeToRepRole(state.activeRole), [state.activeRole]);
+
+  const isTileAllowed = useCallback(
+    (tileId: string): boolean => {
+      if (state.featureScope === 'DXPBK-1900') {
+        return true;
+      }
+      const def = ROLE_DEFINITIONS[state.activeRole];
+      return def ? def.allowedTiles.includes(tileId) : false;
+    },
+    [state.featureScope, state.activeRole],
+  );
+
   const value = useMemo(
     (): SandboxContextValue => ({
       ...state,
+      repRole,
+      setFeatureScope,
+      setActiveRole,
+      setPurchaseType,
       setReleaseStage,
       setDeliveryStatus,
       setTemplateType,
       setConsentMode,
       setTelemetryStream,
+      isTileAllowed,
     }),
     [
       state,
+      repRole,
+      setFeatureScope,
+      setActiveRole,
+      setPurchaseType,
       setReleaseStage,
       setDeliveryStatus,
       setTemplateType,
       setConsentMode,
       setTelemetryStream,
+      isTileAllowed,
     ],
   );
 
@@ -154,15 +315,15 @@ export function useSandbox(): SandboxContextValue {
 }
 
 export function isStage1Mvp(releaseStage: ReleaseStage): boolean {
-  return releaseStage === 'Stage 1: MVP';
+  return releaseStage === 'stage1-mvp';
 }
 
 export function isStage2Enhanced(releaseStage: ReleaseStage): boolean {
-  return releaseStage === 'Stage 2: Enhanced';
+  return releaseStage === 'stage2-enhanced';
 }
 
 export function isStage3NorthStar(releaseStage: ReleaseStage): boolean {
-  return releaseStage === 'Stage 3: North Star';
+  return releaseStage === 'stage3-northstar';
 }
 
 /**
@@ -236,9 +397,9 @@ export function useReleaseStageView(): ReleaseStageViewFlags {
 
 export function releaseStageToHorizon(stage: ReleaseStage): ProductHorizon {
   switch (stage) {
-    case 'Stage 3: North Star':
+    case 'stage3-northstar':
       return 'H3';
-    case 'Stage 2: Enhanced':
+    case 'stage2-enhanced':
       return 'H2';
     default:
       return 'H1';
@@ -248,11 +409,11 @@ export function releaseStageToHorizon(stage: ReleaseStage): ProductHorizon {
 export function horizonToReleaseStage(horizon: ProductHorizon): ReleaseStage {
   switch (horizon) {
     case 'H3':
-      return 'Stage 3: North Star';
+      return 'stage3-northstar';
     case 'H2':
-      return 'Stage 2: Enhanced';
+      return 'stage2-enhanced';
     default:
-      return 'Stage 1: MVP';
+      return 'stage1-mvp';
   }
 }
 
@@ -369,20 +530,6 @@ export function telemetryStreamWarning(stream: TelemetryStream): string | null {
     default:
       return null;
   }
-}
-
-const FEATURE_SCOPE_HOME_TILE: Record<FeatureScopeId, string> = {
-  'DXPBK-1900': 'email-activity-logs',
-  'DXPBK-2100': 'cancel-orders',
-  'DXPBK-2101': 'returns',
-  'DXPBK-2102': 'releasing-holds',
-  'DXPBK-2103': 'tax-exempt-holds',
-  'DXPBK-2104': 'reprocess-failed',
-  'DXPBK-2105': 'order-details',
-};
-
-export function isHomeTileInFeatureScope(tileId: string, featureScope: FeatureScopeId): boolean {
-  return FEATURE_SCOPE_HOME_TILE[featureScope] === tileId;
 }
 
 export function supportRepCanEditCommunicationActions(repRole: RepRole): boolean {

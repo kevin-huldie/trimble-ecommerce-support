@@ -87,7 +87,7 @@ export function AdvancedFiltersZeroResultsCard({
 
 export function ActivityLogsZeroResultsCard({
   variant,
-  searchQuery,
+  searchQuery: _searchQuery,
   onClearSearchAndFilters,
 }: ActivityLogsZeroResultsCardProps) {
   if (variant === 'search') {
