@@ -251,7 +251,7 @@ export function ActivityLogsPage() {
                   />
                   <LogsTable
                     logs={paginatedLogs.map(activityLogToEmailLog)}
-                    compactLayout={releaseStageView.useCompactActivityLogsTable}
+                    compactLayout={releaseStageView.useCompactActivityLogTable}
                     showStatusInDateColumn={releaseStageView.showStatusBadgeInCompactDateColumn}
                   />
                   <LogsPaginationFooter
