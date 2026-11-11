@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { LucideIcon } from 'lucide-react';
 import {
@@ -8,6 +8,7 @@ import {
   CreditCard,
   FileText,
   Lock,
+  Mail,
   PauseCircle,
   RefreshCw,
   RotateCcw,
@@ -18,7 +19,6 @@ import {
 } from 'lucide-react';
 import { PortalShell } from '../components/PortalShell';
 import { useSandbox } from '../context/SandboxContext';
-import type { FeatureScope, ReleaseStage } from '../context/SandboxContext';
 
 export interface PortalTile {
   id: string;
@@ -27,454 +27,333 @@ export interface PortalTile {
   route: string;
   icon: LucideIcon;
   buttonLabel: string;
+  isFutureRelease?: boolean;
 }
 
-// 12 cards ordered by task-frequency & operational lifecycle
-const ALL_PORTAL_TILES: PortalTile[] = [
-  // Tier 1: Primary investigation & order mutation
+export const ALL_PORTAL_TILES: PortalTile[] = [
+  // ==========================================================================
+  // 8 Active Operational Triage Modules
+  // ==========================================================================
   {
-    id: 'order-details',
-    title: 'Order details',
-    description:
-      'Search by order number or account ID. Access itemized records, license keys, and transaction history.',
-    route: '/order-details',
-    icon: FileText,
-    buttonLabel: 'View orders',
+    id: 'failed-orders',
+    title: 'Reprocessing failed orders',
+    description: 'Diagnose gateway timeouts, address verification flags, and reprocess stuck orders through fulfillment.',
+    route: '/failed-orders',
+    icon: RefreshCw,
+    buttonLabel: 'Retry orders',
+    isFutureRelease: false,
   },
   {
     id: 'cancel-orders',
     title: 'Cancel orders',
-    description:
-      'Execute customer- or merchant-initiated order cancellations before warehouse fulfillment commences.',
+    description: 'Execute pre-fulfillment stops, trigger inventory restock webhooks, and issue cancellation notices.',
     route: '/cancel-orders',
     icon: Ban,
     buttonLabel: 'Cancel order',
+    isFutureRelease: false,
+  },
+  {
+    id: 'order-details',
+    title: 'Order details',
+    description: 'Inspect itemized lines, software license tiers, TID entitlements, and multi-carrier tracking timelines.',
+    route: '/order-details',
+    icon: FileText,
+    buttonLabel: 'View details',
+    isFutureRelease: false,
   },
   {
     id: 'refund-orders',
     title: 'Refund orders',
-    description:
-      'Issue full or partial refunds directly to original payment methods or grant Trimble store credit.',
+    description: 'Authorize full or partial payment reversals to original payment methods or generate store credits.',
     route: '/refund-orders',
     icon: CreditCard,
     buttonLabel: 'Issue refund',
+    isFutureRelease: false,
   },
-  {
-    id: 'process-returns',
-    title: 'Process returns',
-    description:
-      'Initiate customer returns, log damaged hardware, issue return labels, and track incoming RMA shipments.',
-    route: '/process-returns',
-    icon: RotateCcw,
-    buttonLabel: 'Process return',
-  },
-
-  // Tier 2: Compliance, dispute & risk clearance
   {
     id: 'release-holds',
     title: 'Releasing holds',
-    description:
-      'Review and resolve compliance, credit, fraud, or high-risk D-Country holds requiring operational clearance.',
+    description: 'Clear operational, inventory allocation, and manual customer service reviews to resume order fulfillment.',
     route: '/release-holds',
     icon: PauseCircle,
     buttonLabel: 'Release holds',
+    isFutureRelease: false,
   },
   {
     id: 'tax-exemption-holds',
     title: 'Releasing tax exempted holds',
-    description:
-      'Validate VAT/GST IDs, Canadian provincial exemption certificates, and US state forms to release pending orders.',
+    description: 'Verify state resale certificates, B2B VAT/GST IDs, and Canadian provincial tax exemptions (QST/PST).',
     route: '/tax-exemption-holds',
     icon: ShieldCheck,
     buttonLabel: 'Verify tax',
+    isFutureRelease: false,
   },
   {
-    id: 'process-chargebacks',
-    title: 'Process chargeback',
-    description:
-      'Compile representment evidence, dispute issuing bank chargebacks, and handle customer payment reversals.',
-    route: '/chargebacks',
-    icon: AlertTriangle,
-    buttonLabel: 'View disputes',
-    isFutureRelease: true,
-  },
-
-  // Tier 3: System exception recovery & audit telemetry
-  {
-    id: 'failed-orders',
-    title: 'Reprocessing failed orders',
-    description:
-      'Diagnose gateway timeouts, address verification flags, and reprocess stuck orders through fulfillment.',
-    route: '/failed-orders',
-    icon: RefreshCw,
-    buttonLabel: 'Retry orders',
-  },
-  {
-    id: 'generate-report',
-    title: 'Generate report',
-    description:
-      'Generate and export User Access Review (UAR) audit logs and post-purchase exception reports as PDF or Excel.',
+    id: 'reports',
+    title: 'Reports',
+    description: 'Export post-purchase audit logs, daily cancellation tallies, and financial reconciliation batches.',
     route: '/reports',
     icon: BarChart3,
     buttonLabel: 'Generate report',
+    isFutureRelease: false,
+  },
+  {
+    id: 'process-returns',
+    title: 'Returns',
+    description: 'Manage RMA lifecycles, warehouse receiving inspections, exchange dispatches, and restocking policies.',
+    route: '/returns',
+    icon: RotateCcw,
+    buttonLabel: 'Process return',
+    isFutureRelease: false,
   },
 
-  // Tier 4: Enterprise operations & administration
+  // ==========================================================================
+  // 6 Planned Roadmap Modules (Stage 2/3 Preview - Intercepted)
+  // ==========================================================================
   {
     id: 'product-upload',
     title: 'Product upload',
-    description:
-      'Batch upload catalog SKU updates, software license bundle definitions, and enterprise pricing matrices.',
+    description: 'Bulk catalog ingestion, SKU attribute mapping, and Trimble price book synchronization.',
     route: '/product-upload',
     icon: UploadCloud,
-    buttonLabel: 'Upload products',
+    buttonLabel: 'Upload catalog',
     isFutureRelease: true,
   },
   {
     id: 'promo-code-upload',
     title: 'Promo code upload',
-    description:
-      'Configure and publish enterprise discount campaigns, seasonal promotional codes, and retention vouchers.',
+    description: 'Ingest campaign coupon tables, discount eligibility rules, and regional promotional overrides.',
     route: '/promo-code-upload',
     icon: Tag,
-    buttonLabel: 'Upload codes',
+    buttonLabel: 'Manage promos',
+    isFutureRelease: true,
+  },
+  {
+    id: 'process-chargeback',
+    title: 'Process chargeback',
+    description: 'Assemble representment evidence packs, dispute friendly fraud, and track bank arbitration status.',
+    route: '/chargebacks',
+    icon: AlertTriangle,
+    buttonLabel: 'Review dispute',
+    isFutureRelease: true,
+  },
+  {
+    id: 'email-activity-logs',
+    title: 'Email activity logs',
+    description: 'Inspect message gateway event streams, deliverability telemetry, and customer notification histories.',
+    route: '/email-activity-logs',
+    icon: Mail,
+    buttonLabel: 'Search logs',
     isFutureRelease: true,
   },
   {
     id: 'role-management',
     title: 'Role management',
-    description:
-      'Assign, stack, and revoke user roles across support personnel to enforce system access governance.',
+    description: 'Provision support personas, adjust operational scopes, and enforce principle of least privilege.',
     route: '/role-management',
     icon: Users,
     buttonLabel: 'Manage roles',
+    isFutureRelease: true,
+  },
+  {
+    id: 'trial-frequency-cap',
+    title: 'Trial frequency cap',
+    description: 'Configure software evaluation throttle thresholds and prevent serial trial license abuse.',
+    route: '/trial-frequency-cap',
+    icon: Lock,
+    buttonLabel: 'Manage caps',
+    isFutureRelease: true,
   },
 ];
 
-function isStage1(releaseStage: ReleaseStage): boolean {
-  return releaseStage === 'stage1-mvp';
-}
-
-function isStage2Or3(releaseStage: ReleaseStage): boolean {
-  return releaseStage === 'stage2-enhanced' || releaseStage === 'stage3-northstar';
-}
-
-function homeTileTooltipMessage(title: string): string {
-  return `Navigates to ${title} flow`;
-}
-
-function filterTilesForScope(
-  featureScope: FeatureScope,
-  isTileAllowed: (tileId: string) => boolean,
-): PortalTile[] {
-  if (featureScope === 'DXPBK-1900') {
-    return ALL_PORTAL_TILES;
-  }
-  return ALL_PORTAL_TILES.filter((tile) => isTileAllowed(tile.id));
-}
-
 export const HomePage: React.FC = () => {
   const navigate = useNavigate();
-  const { releaseStage, activeRole, featureScope, isTileAllowed } = useSandbox();
+  const { allowedTiles, releaseStage } = useSandbox();
+
+  // Evaluated inline safely without hoisting dependencies; includes Stage 1 MVP roadmap modules
+  const showPlannedBadges = 
+    releaseStage === 'stage1-mvp' || 
+    releaseStage === 'stage2-enhanced' || 
+    releaseStage === 'stage3-northstar';
+
+  // State hook managing click-to-open and click-to-close inline card tooltips
   const [activeTooltipId, setActiveTooltipId] = useState<string | null>(null);
-  const gridsRef = useRef<HTMLDivElement>(null);
 
-  const visibleTiles = useMemo(
-    () => filterTilesForScope(featureScope, isTileAllowed),
-    [featureScope, isTileAllowed],
-  );
+  // Strict sorting: 8 Active triage modules lead, 6 Planned roadmap modules anchor at the end
+  const visibleCards = useMemo(() => {
+    const cards = ALL_PORTAL_TILES.filter((tile) => allowedTiles.includes(tile.id));
 
-  const showUnassignedEmpty =
-    featureScope === 'DXPBK-2123' && activeRole === 'unassigned';
+    return cards.sort((a, b) => {
+      const aPlanned = Boolean(a.isFutureRelease);
+      const bPlanned = Boolean(b.isFutureRelease);
+      if (!aPlanned && bPlanned) return -1;
+      if (aPlanned && !bPlanned) return 1;
+      return 0;
+    });
+  }, [allowedTiles]);
 
-  const requestPortalAccess = useCallback(() => {
-    const subject = encodeURIComponent('Request: eCommerce Order Support Portal access');
-    const body = encodeURIComponent(
-      'Please assign appropriate support rep roles so I can use the eCommerce Order Support portal.',
-    );
-    window.location.href = `mailto:?subject=${subject}&body=${body}`;
-  }, []);
-
-  const dismissTooltip = useCallback(() => setActiveTooltipId(null), []);
-
-  useEffect(() => {
-    if (!activeTooltipId) return undefined;
-    const timer = window.setTimeout(() => setActiveTooltipId(null), 4000);
-    return () => window.clearTimeout(timer);
-  }, [activeTooltipId]);
-
-  useEffect(() => {
-    if (!activeTooltipId) return undefined;
-
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') dismissTooltip();
-    };
-
-    const onPointerDown = (event: globalThis.MouseEvent) => {
-      const target = event.target as Node;
-      if (gridsRef.current?.contains(target)) return;
-      dismissTooltip();
-    };
-
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('mousedown', onPointerDown);
-    return () => {
-      document.removeEventListener('keydown', onKeyDown);
-      document.removeEventListener('mousedown', onPointerDown);
-    };
-  }, [activeTooltipId, dismissTooltip]);
+  const handleCardClick = (tile: PortalTile) => {
+    if (tile.isFutureRelease) {
+      alert(`The "${tile.title}" capability is currently scheduled for future release (${releaseStage}).`);
+      return;
+    }
+    navigate(tile.route);
+  };
 
   return (
-    <PortalShell hideSidebar contentClassName="bg-[#F4F5F7] text-[#252525]">
-      <main className="max-w-7xl mx-auto px-6 py-8" id="main-content">
-        <div className="mb-6">
-          <h1 className="text-2xl font-bold text-[#212529]">eCommerce Order Support Portal</h1>
-          <p className="mt-1 text-sm text-[#495057]">
-          Select an option below to begin order triage or account support tasks.
-          </p>
-        </div>
-
-        <div ref={gridsRef}>
-          {showUnassignedEmpty ? (
-           <div className="max-w-xl mx-auto text-center bg-white border border-[#CED4DA] rounded-[4px] p-8 shadow-sm my-6" role="status" aria-live="polite">
-           {/* Stage 1: MVP (Clean icon without background circle) | Stage 2: Enhanced (Contained rounded chip) */}
-           {releaseStage === 'stage1-mvp' ? (
-             <div className="flex justify-center mb-4 text-[#6A7481]" aria-hidden="true">
-               <Lock className="w-10 h-10" strokeWidth={1.5} />
-             </div>
-           ) : (
-             <div 
-               className="w-14 h-14 mx-auto rounded-[8px] bg-[#F0F4F8] flex items-center justify-center text-[#0063A3] mb-4"
-               aria-hidden="true"
-             >
-               <Lock className="w-7 h-7" strokeWidth={1.5} />
-             </div>
-           )}
-         
-           <h2 className="text-lg font-semibold text-[#212529] mb-2">
-             No portal access yet
-           </h2>
-         
-           {/* max-w-md mx-auto prevents wide stretching across large viewports */}
-           <p className="text-xs text-[#6A7481] leading-relaxed max-w-md mx-auto mb-6">
-             Your Trimble ID does not have any active roles assigned for this support portal. Contact your manager or IT to request the correct entitlements, or use the button below to draft an access request email.
-           </p>
-         
-           <div className="relative inline-block">
-  <button 
-    type="button"
-    onClick={requestPortalAccess}
-    onMouseEnter={() => setActiveTooltipId('request-access')}
-    onMouseLeave={() => setActiveTooltipId(null)}
-    onFocus={() => setActiveTooltipId('request-access')}
-    onBlur={() => setActiveTooltipId(null)}
-    aria-describedby={activeTooltipId === 'request-access' ? 'tooltip-request-access' : undefined}
-    className="py-2 px-5 bg-[#0063A3] text-white text-xs font-semibold rounded hover:bg-[#004f82] transition-colors focus:ring-2 focus:ring-offset-2 focus:ring-[#0063A3] focus:outline-none"
-  >
-    Request portal access
-  </button>
-
-  {/* Modus Design System Tooltip */}
-  {activeTooltipId === 'request-access' && (
-    <div
-      id="tooltip-request-access"
-      role="tooltip"
-      className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2.5 py-1.5 bg-[#212529] text-white text-[11px] font-normal rounded shadow-md whitespace-nowrap z-50 pointer-events-none"
-    >
-      Drafts an access request email to your manager
-      <div 
-        className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-[#212529]" 
-        aria-hidden="true"
-      />
-    </div>
-  )}
-</div>
-         </div>
-          ) : null}
-
-          {!showUnassignedEmpty && visibleTiles.length === 0 && featureScope === 'DXPBK-2123' ? (
-            <p className="rounded border border-[#CED4DA] bg-white px-4 py-6 text-center text-sm text-[#6A7481]">
-              No operational modules are available for the selected support rep role.
-            </p>
-          ) : null}
-
-          {/* Stage 1: MVP — 5-column fluid grid + original card chrome */}
-          {isStage1(releaseStage) && !showUnassignedEmpty && visibleTiles.length > 0 ? (
-            <ul className="grid grid-cols-1 list-none gap-4 overflow-visible p-0 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5">
-              {visibleTiles.map((tile) => {
-                const Icon = tile.icon;
-                const tooltipId = `home-tooltip-${tile.id}`;
-                const isTooltipOpen = activeTooltipId === tile.id;
-
-                const handlePrimaryClick = (event: MouseEvent<HTMLButtonElement>) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  if (activeTooltipId === tile.id) {
-                    navigate(tile.route);
-                    setActiveTooltipId(null);
-                  } else {
-                    setActiveTooltipId(tile.id);
-                  }
-                };
-
-                return (
-                  <li
-                    key={tile.id}
-                    className={`relative min-w-0 overflow-visible ${isTooltipOpen ? 'z-[80]' : 'z-0'}`}
-                  >
-                    <article className="flex h-full min-h-[200px] flex-col items-center justify-between overflow-visible rounded border border-[#E0E0E0] bg-white p-6 text-center shadow-[0_2px_4px_rgba(0,0,0,0.06)] transition-opacity transition-shadow hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.1)]">
-                      <div className="mt-2 flex flex-col items-center">
-                        <Icon
-                          className="mb-4 h-8 w-8 text-[#252525]"
-                          strokeWidth={1.5}
-                          aria-hidden
-                        />
-                        <h3
-                          id={`${tile.id}-title`}
-                          className="max-w-[11rem] text-sm font-bold leading-tight text-[#252525]"
-                        >
-                          {tile.title}
-                        </h3>
-                      </div>
-
-                      <div className="relative mt-6 w-full overflow-visible">
-                        <div className="relative inline-block w-full">
-                          {isTooltipOpen ? (
-                            <div
-                              id={tooltipId}
-                              role="tooltip"
-                              aria-live="polite"
-                              className="pointer-events-none absolute bottom-full left-1/2 z-[100] mb-2.5 w-max max-w-[min(100vw-2rem,20rem)] -translate-x-1/2 rounded border border-[#3B424C] bg-[#1E2227] px-3 py-1.5 text-center text-xs font-medium whitespace-normal text-white shadow-xl"
-                            >
-                              {homeTileTooltipMessage(tile.title)}
-                              <div
-                                aria-hidden
-                                className="absolute top-full left-1/2 mt-[-1px] h-0 w-0 -translate-x-1/2 border-x-4 border-x-transparent border-t-4 border-t-[#1E2227]"
-                              />
-                              <div
-                                aria-hidden
-                                className="absolute top-full left-1/2 mt-[-2px] -z-10 h-0 w-0 -translate-x-1/2 border-x-[5px] border-x-transparent border-t-[5px] border-t-[#3B424C]"
-                              />
-                            </div>
-                          ) : null}
-                          <button
-                            type="button"
-                            aria-describedby={isTooltipOpen ? tooltipId : undefined}
-                            aria-expanded={isTooltipOpen}
-                            onClick={handlePrimaryClick}
-                            className="w-full rounded bg-[#0063A3] px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-[#004f82] focus:outline-none focus:ring-2 focus:ring-[#0063A3] focus:ring-offset-1"
-                          >
-                            {tile.buttonLabel}
-                          </button>
-                        </div>
-                      </div>
-                    </article>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : null}
-
-          {/* Stage 2 & Stage 3 — 3-column content-rich cards */}
-          {isStage2Or3(releaseStage) && !showUnassignedEmpty && visibleTiles.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-fr">
-              {visibleTiles.map((tile) => {
-                const Icon = tile.icon;
-                const iconClassName = 'h-6 w-6 text-[#0063A3]';
-
-                const tooltipId = `home-tooltip-${tile.id}`;
-                const isTooltipOpen = activeTooltipId === tile.id;
-
-                const goOrToggle = () => {
-                  if (activeTooltipId === tile.id) {
-                    navigate(tile.route);
-                    setActiveTooltipId(null);
-                  } else {
-                    setActiveTooltipId(tile.id);
-                  }
-                };
-
-                return (
-                  <div
-                    key={tile.id}
-                    role="button"
-                    tabIndex={0}
-                    aria-describedby={isTooltipOpen ? tooltipId : undefined}
-                    aria-expanded={isTooltipOpen}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      goOrToggle();
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' || e.key === ' ') {
-                        e.preventDefault();
-                        goOrToggle();
-                      }
-                    }}
-                    className={`group flex w-full cursor-pointer flex-col justify-between rounded-[4px] border border-[#CED4DA] bg-white p-5 shadow-sm transition-all hover:border-[#0063A3] hover:shadow-md ${isTooltipOpen ? 'relative z-[80]' : ''}`}
-                  >
-                    <div>
- <div className="flex items-start gap-3.5">
-  {/* Enclosed icon container */}
-  <div 
-    aria-hidden="true" 
-    className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[8px] bg-[#F0F4F8] transition-colors group-hover:bg-[#E1EDF7]"
-  >
-    <Icon className={iconClassName} aria-hidden="true" />
-  </div>
-
-  {/* Nested text column: groups title and description with tight, natural spacing */}
-  <div className="min-w-0 flex-1 pt-0.5">
-    <h3 className="text-base font-semibold leading-snug text-[#212529] transition-colors group-hover:text-[#0063A3]">
-      {tile.title}
-    </h3>
-    <p className="mt-1 text-xs font-normal leading-relaxed text-[#495057]">
-      {tile.description}
-    </p>
-  </div>
-</div>
-                    </div>
-
-                    <div className="relative ml-9 mt-4 border-t border-gray-100 pt-3">
-                      {isTooltipOpen ? (
-                        <div
-                          id={tooltipId}
-                          role="tooltip"
-                          aria-live="polite"
-                          className="pointer-events-none absolute bottom-full left-0 z-[100] mb-2 max-w-[min(100%,18rem)] rounded border border-[#3B424C] bg-[#1E2227] px-3 py-1.5 text-xs font-medium text-white shadow-xl"
-                        >
-                          {homeTileTooltipMessage(tile.title)}
-                          <div
-                            aria-hidden
-                            className="absolute top-full left-6 mt-[-1px] h-0 w-0 border-x-4 border-x-transparent border-t-4 border-t-[#1E2227]"
-                          />
-                        </div>
-                      ) : null}
-                      <div className="flex items-center justify-between">
-                        <span className="flex items-center gap-1 text-xs font-semibold text-[#0063A3] group-hover:underline">
-                          {tile.buttonLabel}
-                          <svg
-                            className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                            aria-hidden
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth="2"
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+    <PortalShell>
+      <main
+        id="main-content"
+        className="min-h-screen bg-[#F4F6F8] px-4 py-8 sm:px-6 lg:px-8"
+        onClick={() => setActiveTooltipId(null)}
+      >
+        <div className="mx-auto max-w-7xl">
+         {/* Dynamic Page Header: Borderless in Stage 1, Divided in Stage 2 */}
+         <header
+            className={
+              releaseStage === 'stage1-mvp'
+                ? 'mb-6'
+                : 'mb-6 border-b border-[#D8DCDE] pb-4'
+            }
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-[#252A2E]">
+                  eCommerce Order Support Portal
+                </h1>
+                <p className="mt-1 text-xs text-[#5C6670]">
+                  Select an operational module below to begin order triage, exception review, or customer account support.
+                </p>
+              </div>
+              <span className="rounded bg-[#E5EDF2] px-2.5 py-1 text-xs font-semibold text-[#0063A3]">
+                {releaseStage === 'stage1-mvp' ? 'Stage 1: 5-Column Tiles' : 'Stage 2: 3-Column Cards'}
+              </span>
             </div>
-          ) : null}
+          </header>
+
+          {/* Dynamic Grid: Stage 1 (Strict 5-Cols) vs. Stage 2 (Strict 3-Cols) */}
+          <section
+            aria-label="Support Operational Modules"
+            className={
+              releaseStage === 'stage1-mvp'
+                ? 'grid grid-cols-5 gap-4'
+                : 'grid grid-cols-3 gap-6'
+            }
+          >
+            {visibleCards.map((tile) => {
+            const Icon = tile.icon;
+            const isStage1 = releaseStage === 'stage1-mvp';
+
+            return isStage1 ? (
+              /* ==========================================================
+                 STAGE 1 (MVP): Centered Modus Operational Tile (Figma Spec)
+                 - Strict 194px height
+                 - 36px icon within 42px bounding frame
+                 - 16px bold title
+                 - Bottom-pinned single-line primary blue CTA
+                 - Absolute top-right PLANNED roadmap badge
+                 ========================================================== */
+              <article
+                key={tile.id}
+                className="relative flex h-[194px] w-full flex-col items-center justify-between rounded border border-[#D8DCDE] bg-white px-3 pb-4 pt-6 shadow-sm transition hover:border-[#0063A3] hover:shadow"
+              >
+                {/* Planned Roadmap Tag (Stage 2 token parity, non-disruptive overlay) */}
+                {tile.isFutureRelease && showPlannedBadges && (
+                  <span className="absolute right-2.5 top-2.5 rounded bg-[#F1F3F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#495057]">
+                    PLANNED
+                  </span>
+                )}
+
+                {/* 1. Elevated Content Zone: Centered 36px Glyph & 16px Title */}
+                <div className="flex w-full flex-col items-center text-center">
+                  <div className="flex h-[42px] w-[42px] shrink-0 items-center justify-center text-[#252A2E]">
+                    {Icon && <Icon className="h-9 w-9 stroke-[1.5]" aria-hidden="true" />}
+                  </div>
+                  <h2 className="mt-2 line-clamp-2 px-1 text-center text-base font-bold leading-tight text-[#252A2E]">
+                    {tile.title}
+                  </h2>
+                </div>
+
+                {/* 2. Pinned Bottom Zone: Primary Label-Hugging Action Button */}
+                <div className="mt-auto flex w-full justify-center">
+                  <button
+                    type="button"
+                    onClick={() => handleCardClick(tile)}
+                    aria-label={
+                      tile.isFutureRelease
+                        ? `${tile.buttonLabel || 'Open'} (Planned module: ${tile.title})`
+                        : `${tile.buttonLabel || 'Open'} ${tile.title}`
+                    }
+                    className="inline-flex w-auto items-center justify-center whitespace-nowrap rounded bg-[#0063A3] px-5 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-[#004F82] focus:outline-none focus:ring-2 focus:ring-[#0063A3] focus:ring-offset-2"
+                  >
+                    {tile.buttonLabel || 'Open'}
+                  </button>
+                </div>
+              </article>
+            ) : (
+            /* ==========================================================
+               STAGE 2 (ENHANCED): Option 2 Stack (Semibold Title)
+               - Top-left icon with #EBF4FA background fill
+               - 16px Semibold title for balanced visual hierarchy
+               - Short description retained
+               - Left-aligned Modus text link with directional arrow
+               ========================================================== */
+            <article
+              key={tile.id}
+              className="flex w-full flex-col justify-between rounded-lg border border-[#D8DCDE] bg-white p-5 shadow-sm transition hover:border-[#0063A3] hover:shadow-md"
+            >
+              {/* 1. Header & Operational Description */}
+              <div className="text-left">
+                <div className="flex items-center justify-between">
+                  {/* Retained Icon Frame with Soft Blue Fill */}
+                  <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-[#EBF4FA] text-[#0063A3]">
+                    {Icon && <Icon className="h-6 w-6 stroke-[1.75]" aria-hidden="true" />}
+                  </div>
+
+                  {/* Planned Roadmap Tag */}
+                  {tile.isFutureRelease && showPlannedBadges && (
+                    <span className="rounded bg-[#F1F3F5] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-[#495057]">
+                      PLANNED
+                    </span>
+                  )}
+                </div>
+
+                {/* Refined Semibold Operational Title */}
+                <h2 className="mt-4 text-base font-semibold text-[#252A2E]">
+                  {tile.title}
+                </h2>
+
+                {/* Retained Short Description */}
+                <p className="mt-2 text-xs leading-relaxed text-[#5C6670]">
+                  {tile.description}
+                </p>
+              </div>
+
+              {/* 2. Action Area: Left-Aligned Modus Text Link */}
+              <div className="mt-6 border-t border-[#EFEFEF] pt-3 text-left">
+                <button
+                  type="button"
+                  onClick={() => handleCardClick(tile)}
+                  aria-label={
+                    tile.isFutureRelease
+                      ? `${tile.buttonLabel || 'Open'} ${tile.title} (Planned feature)`
+                      : `${tile.buttonLabel || 'Open'} ${tile.title}`
+                  }
+                  className="group inline-flex items-center gap-1.5 rounded text-xs font-semibold text-[#0063A3] transition hover:text-[#004F82] focus:outline-none focus:ring-2 focus:ring-[#0063A3] focus:ring-offset-2"
+                >
+                  <span>{tile.buttonLabel || 'Open triage workflow'}</span>
+                  <span
+                    aria-hidden="true"
+                    className="transition-transform duration-150 group-hover:translate-x-1"
+                  >
+                    &rarr;
+                  </span>
+                </button>
+              </div>
+            </article>
+          );
+          })}
+          </section>
         </div>
       </main>
     </PortalShell>

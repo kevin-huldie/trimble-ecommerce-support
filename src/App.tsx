@@ -1,5 +1,4 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { SandboxDevNotes } from './components/SandboxDevNotes';
 import { ConnectedSandboxUtilityBar } from './components/SandboxUtilityBar';
 import { SandboxProvider } from './context/SandboxContext';
 import { ActivityLogsPage } from './pages/ActivityLogsPage';
@@ -11,7 +10,6 @@ export default function App() {
   return (
     <SandboxProvider>
       <ConnectedSandboxUtilityBar />
-      <SandboxDevNotes />
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/logs" element={<ActivityLogsPage />} />
