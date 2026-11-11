@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import { ConnectedSandboxUtilityBar } from './components/SandboxUtilityBar';
+import { MainHeader } from './components/MainHeader';
 import { SandboxProvider } from './context/SandboxContext';
 import { ActivityLogsPage } from './pages/ActivityLogsPage';
 import { HomePage } from './pages/HomePage';
@@ -9,7 +10,13 @@ import { TrialFrequencyCapSearchPage } from './pages/TrialFrequencyCapSearchPage
 export default function App() {
   return (
     <SandboxProvider>
+      {/* 1. Global sandbox diagnostic and governance controls */}
       <ConnectedSandboxUtilityBar />
+
+      {/* 2. Authoritative Trimble application header & session bar */}
+      <MainHeader />
+
+      {/* 3. Operational workspace routes */}
       <Routes>
         <Route path="/" element={<HomePage />} />
         <Route path="/logs" element={<ActivityLogsPage />} />

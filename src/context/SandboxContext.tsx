@@ -1,331 +1,188 @@
-import React, { createContext, useContext, useState, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, type ReactNode } from 'react';
 
-// ============================================================================
-// 1. Role, Persona, and Scope Types
-// ============================================================================
-
-export type SupportRoleType =
-  | 'super-admin'
-  | 'admin'
-  | 'customer-support'
-  | 'general-cs'
-  | 'enhanced-cs'
-  | 'epayments-cs'
-  | 'epayments-team'
-  | 'view-only-cs'
-  | 'unassigned';
-
-export type RepRole =
-  | 'Super Admin'
-  | 'Administrator'
-  | 'Customer Support'
-  | 'General Customer Support'
-  | 'Enhanced Customer Support'
-  | 'E-Payments Customer Support'
-  | 'View-Only Customer Support';
-
-export type ReleaseStage = 'stage1-mvp' | 'stage2-enhanced' | 'stage3-northstar';
-export type PurchaseType = 'saas-subscription' | 'physical-hardware' | 'perpetual-license';
-
-export type FeatureScope =
-  | 'DXPBK-1900'
-  | 'DXPBK-2123'
-  | 'all'
-  | 'active-only'
-  | 'planned-only'
-  | (string & {});
-
-export interface RoleDefinition {
-  id: SupportRoleType;
-  label: string;
-  allowedTiles: string[];
-}
-
-// ============================================================================
-// 2. Master Operational Tile Catalog (Single Source of Truth)
-// Exactly 14 modules: 8 Active Operational Triage + 6 Planned Roadmap
-// ============================================================================
-
-export const PORTAL_OPERATIONAL_TILE_IDS: readonly string[] = [
-  // 8 Active Operational Triage Modules
-  'failed-orders',
-  'cancel-orders',
-  'order-details',
-  'refund-orders',
-  'release-holds',
-  'tax-exemption-holds',
-  'reports',
-  'process-returns',
-
-  // 6 Planned Roadmap Modules (Stage 2/3 Preview)
-  'product-upload',
-  'promo-code-upload',
-  'process-chargeback',
-  'email-activity-logs',
-  'role-management',
-  'trial-frequency-cap',
+// =========================================================================
+// AUTHORITATIVE 14-MODULE ROSTER & PERMISSION MATRIX (DXPBK-2123)
+// =========================================================================
+export const MODULE_CATALOG = [
+  'Cancel Orders',
+  'Email Activity Logs',
+  'Order Details',
+  'Process Chargeback',
+  'Product Upload',
+  'Promo Code Upload',
+  'Refund Orders',
+  'Reports',
+  'Returns',
+  'Releasing Holds',
+  'Releasing Tax Exempted Holds',
+  'Reprocessing Failed Orders',
+  'Role Management',
+  'Trial Frequency Cap',
 ] as const;
 
-export const PORTAL_OPERATIONAL_TILE_COUNT = PORTAL_OPERATIONAL_TILE_IDS.length; // 14
+export type ModuleName = typeof MODULE_CATALOG[number];
+export type SupportRepRole = 'Customer Support' | 'E-Payments Team' | 'Administrator';
+export type ReleaseStage = 'stage1-mvp' | 'stage2-enhanced' | 'stage3-northstar';
 
-export const ROLE_DEFINITIONS: Record<SupportRoleType, RoleDefinition> = {
-  'super-admin': {
-    id: 'super-admin',
-    label: 'Super Admin',
-    allowedTiles: [
-      'failed-orders',
-      'cancel-orders',
-      'order-details',
-      'refund-orders',
-      'release-holds',
-      'tax-exemption-holds',
-      'reports',
-      'process-returns',
-      'product-upload',
-      'promo-code-upload',
-      'process-chargeback',
-      'email-activity-logs',
-      'role-management',
-      'trial-frequency-cap',
-    ],
-  },
-  admin: {
-    id: 'admin',
-    label: 'Administrator (System Operations)',
-    allowedTiles: ['failed-orders', 'role-management', 'email-activity-logs'],
-  },
-  'customer-support': {
-    id: 'customer-support',
-    label: 'Customer Support',
-    allowedTiles: [
-      'failed-orders',
-      'cancel-orders',
-      'order-details',
-      'refund-orders',
-      'release-holds',
-      'tax-exemption-holds',
-      'reports',
-      'process-returns',
-    ],
-  },
-  'general-cs': {
-    id: 'general-cs',
-    label: 'General Customer Support',
-    allowedTiles: ['order-details', 'cancel-orders', 'refund-orders', 'process-returns', 'reports'],
-  },
-  'enhanced-cs': {
-    id: 'enhanced-cs',
-    label: 'Enhanced Customer Support',
-    allowedTiles: ['order-details', 'product-upload', 'promo-code-upload', 'email-activity-logs'],
-  },
-  'epayments-cs': {
-    id: 'epayments-cs',
-    label: 'E-Payments Customer Support',
-    allowedTiles: ['order-details', 'process-chargeback'],
-  },
-  'epayments-team': {
-    id: 'epayments-team',
-    label: 'E-Payments Team',
-    allowedTiles: ['order-details', 'process-chargeback', 'email-activity-logs'],
-  },
-  'view-only-cs': {
-    id: 'view-only-cs',
-    label: 'View-Only Customer Support',
-    allowedTiles: ['order-details'],
-  },
-  unassigned: {
-    id: 'unassigned',
-    label: 'Unassigned',
-    allowedTiles: [],
-  },
+export const ROLE_PERMISSIONS: Record<SupportRepRole, ModuleName[]> = {
+  // Basic Access + General Customer Support + Email Activity Logs & Trial Frequency Cap
+  'Customer Support': [
+    'Order Details',
+    'Returns',
+    'Releasing Holds',
+    'Releasing Tax Exempted Holds',
+    'Cancel Orders',
+    'Refund Orders',
+    'Reports',
+    'Email Activity Logs',
+    'Trial Frequency Cap',
+  ],
+  // Basic Access + E-Payments Customer Support
+  'E-Payments Team': [
+    'Order Details',
+    'Process Chargeback',
+  ],
+  // Full Access across all 5 permission set groups
+  'Administrator': [
+    'Cancel Orders',
+    'Email Activity Logs',
+    'Order Details',
+    'Process Chargeback',
+    'Product Upload',
+    'Promo Code Upload',
+    'Refund Orders',
+    'Reports',
+    'Returns',
+    'Releasing Holds',
+    'Releasing Tax Exempted Holds',
+    'Reprocessing Failed Orders',
+    'Role Management',
+    'Trial Frequency Cap',
+  ],
 };
 
-// ============================================================================
-// 3. Helper Functions, Stubs & Custom Hooks (Ticket DXPBK-2123)
-// ============================================================================
+// =========================================================================
+// SATELLITE EXPORTS FOR LOGS, AUDIT, AND TELEMETRY PAGES
+// =========================================================================
 
-export const isOperationalTile = (id: string): boolean => {
-  return (PORTAL_OPERATIONAL_TILE_IDS as readonly string[]).includes(id);
-};
+// LogDetailsPage.tsx (Line 11) & communication actions
+export const communicationActionsReadOnly: boolean = true;
+export const communicationActionsDisabled: boolean = false;
+export const communicationActionsMessage: string = 'Read-only audit record in sandbox mode';
 
-export const getTileLabel = (id: string): string => {
-  return id.replace(/-/g, ' ').replace(/\b\w/g, (char) => char.toUpperCase());
-};
+// SandboxTelemetryBanner.tsx
+export const telemetryStreamWarning: string | null = null;
+export const telemetryStreamingActive: boolean = false;
 
-export const getVisibleOperationalTileIds = (
-  _scope: FeatureScope = 'DXPBK-2123',
-  role: SupportRoleType = 'super-admin',
-  _stage: ReleaseStage = 'stage2-enhanced'
-): string[] => {
-  return ROLE_DEFINITIONS[role]?.allowedTiles || [];
-};
+// ActivityLogsPage.tsx & AuditTable.tsx filters
+export const logMatchesSandboxDelivery = (_log: any, _stage?: ReleaseStage | string): boolean => true;
+export const logMatchesSandboxTemplate = (_log: any, _templateFilter?: string): boolean => true;
+export const auditLogMatchesSandboxDelivery = (_log: any, _stage?: ReleaseStage | string): boolean => true;
+export const auditLogMatchesSandboxTemplate = (_log: any, _templateFilter?: string): boolean => true;
 
-export const telemetryStreamWarning = null;
+// General mock collections and state toggles for sub-routes
+export const MOCK_ORDERS: any[] = [];
+export const MOCK_ACCOUNTS: any[] = [];
+export const MOCK_LOGS: any[] = [];
+export const MOCK_AUDIT_LOGS: any[] = [];
 
-export const logMatchesSandboxDelivery = (
-  _log?: any,
-  _filterCriteria?: any
-): boolean => true;
-
-export const logMatchesSandboxTemplate = (
-  _log?: any,
-  _filterCriteria?: any
-): boolean => true;
-
-export const auditLogMatchesSandboxDelivery = (
-  _log?: any,
-  _filterCriteria?: any
-): boolean => true;
-
-/**
- * Callable permission guard function resolving Ln 28 in LogDetailsPage.tsx
- */
-export const communicationActionsReadOnly = (_role?: any): boolean => false;
-
-/**
- * Stage view return contract explicitly providing layout and metadata flags
- */
-export interface ReleaseStageViewResult {
-  stage: ReleaseStage;
-  isMVP: boolean;
-  isStage1: boolean;
-  isStage2: boolean;
-  isStage3: boolean;
-  isStage2Or3: boolean;
-  useCompactActivityLogTable: boolean;
-  showStatusBadgeInCompactDateColumn: boolean;
-  // Metadata flags consumed by LogDetailsPage.tsx
-  showAccountIdMetadata: boolean;
-  showTriggeringEventMetadata: boolean;
-  showSendGridTemplateId: boolean;
-  useMvpAuditHistoryTable: boolean;
-  showAuditJustification: boolean;
+export interface SandboxContextType {
+  releaseStage: ReleaseStage;
+  setReleaseStage: (stage: ReleaseStage) => void;
+  currentRole: SupportRepRole;
+  setCurrentRole: (role: SupportRepRole) => void;
+  visibleModuleNames: ModuleName[];
+  visibleModuleCountString: string;
+  // Legacy / satellite properties
+  telemetryStreamWarning?: string | null;
+  communicationActionsReadOnly?: boolean;
+  communicationActionsDisabled?: boolean;
+  communicationActionsMessage?: string;
+  logMatchesSandboxDelivery?: typeof logMatchesSandboxDelivery;
+  logMatchesSandboxTemplate?: typeof logMatchesSandboxTemplate;
+  auditLogMatchesSandboxDelivery?: typeof auditLogMatchesSandboxDelivery;
+  auditLogMatchesSandboxTemplate?: typeof auditLogMatchesSandboxTemplate;
+  selectedOrderId?: string | null;
+  setSelectedOrderId?: (id: string | null) => void;
+  selectedAccountId?: string | null;
+  setSelectedAccountId?: (id: string | null) => void;
 }
 
-export const useReleaseStageView = (): ReleaseStageViewResult => {
-  const { releaseStage } = useSandbox();
-  const isMVP = releaseStage === 'stage1-mvp';
-  const isStage2 = releaseStage === 'stage2-enhanced';
-  const isStage3 = releaseStage === 'stage3-northstar';
+const defaultContextValue: SandboxContextType = {
+  releaseStage: 'stage1-mvp',
+  setReleaseStage: () => {},
+  currentRole: 'Customer Support',
+  setCurrentRole: () => {},
+  visibleModuleNames: ROLE_PERMISSIONS['Customer Support'],
+  visibleModuleCountString: '9 of 14 Modules',
+  telemetryStreamWarning: null,
+  communicationActionsReadOnly: true,
+  communicationActionsDisabled: false,
+  communicationActionsMessage: 'Read-only audit record in sandbox mode',
+  logMatchesSandboxDelivery,
+  logMatchesSandboxTemplate,
+  auditLogMatchesSandboxDelivery,
+  auditLogMatchesSandboxTemplate,
+  selectedOrderId: null,
+  setSelectedOrderId: () => {},
+  selectedAccountId: null,
+  setSelectedAccountId: () => {},
+};
 
+const SandboxContext = createContext<SandboxContextType>(defaultContextValue);
+
+export const SandboxProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const [releaseStage, setReleaseStage] = useState<ReleaseStage>('stage1-mvp');
+  const [currentRole, setCurrentRole] = useState<SupportRepRole>('Customer Support');
+  const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+
+  const visibleModuleNames = ROLE_PERMISSIONS[currentRole] || ROLE_PERMISSIONS['Customer Support'];
+  const visibleModuleCountString = `${visibleModuleNames.length} of ${MODULE_CATALOG.length} Modules`;
+
+  return (
+    <SandboxContext.Provider
+      value={{
+        releaseStage,
+        setReleaseStage,
+        currentRole,
+        setCurrentRole,
+        visibleModuleNames,
+        visibleModuleCountString,
+        telemetryStreamWarning,
+        communicationActionsReadOnly,
+        communicationActionsDisabled,
+        communicationActionsMessage,
+        logMatchesSandboxDelivery,
+        logMatchesSandboxTemplate,
+        auditLogMatchesSandboxDelivery,
+        auditLogMatchesSandboxTemplate,
+        selectedOrderId,
+        setSelectedOrderId,
+        selectedAccountId,
+        setSelectedAccountId,
+      }}
+    >
+      {children}
+    </SandboxContext.Provider>
+  );
+};
+
+export const useSandbox = (): SandboxContextType => {
+  const context = useContext(SandboxContext);
+  return context || defaultContextValue;
+};
+
+// Hook required by ActivityLogsPage.tsx
+export const useReleaseStageView = () => {
+  const { releaseStage } = useSandbox();
   return {
-    stage: releaseStage,
-    isMVP,
-    isStage1: isMVP,
-    isStage2,
-    isStage3,
-    isStage2Or3: isStage2 || isStage3,
-    useCompactActivityLogTable: isMVP,
-    showStatusBadgeInCompactDateColumn: !isStage3,
-    showAccountIdMetadata: true,
-    showTriggeringEventMetadata: true,
-    showSendGridTemplateId: !isMVP,
-    useMvpAuditHistoryTable: isMVP,
-    showAuditJustification: isStage2 || isStage3,
+    releaseStage,
+    isMvp: releaseStage === 'stage1-mvp',
+    isEnhanced: releaseStage === 'stage2-enhanced',
+    isNorthStar: releaseStage === 'stage3-northstar',
+    layoutMode: releaseStage === 'stage1-mvp' ? 'density-5-col' : 'operational-3-col',
   };
 };
 
-// ============================================================================
-// 4. Context Definition and State Provider
-// ============================================================================
-
-export interface SandboxContextValue {
-  releaseStage: ReleaseStage;
-  setReleaseStage: (stage: ReleaseStage) => void;
-  activeRole: SupportRoleType;
-  /** Role alias expected by LogDetailsPage.tsx Ln 26 */
-  repRole?: SupportRoleType;
-  setActiveRole: (role: SupportRoleType) => void;
-  purchaseType: PurchaseType;
-  setPurchaseType: (type: PurchaseType) => void;
-  featureScope: FeatureScope;
-  setFeatureScope: (scope: FeatureScope) => void;
-  allowedTiles: string[];
-  isTileAllowed: (tileId: string) => boolean;
-  isDevNotesOpen: boolean;
-  setIsDevNotesOpen: (open: boolean) => void;
-  toggleDevNotes: () => void;
-  deliveryStatus?: string;
-  templateType?: string;
-}
-
-const SandboxContext = createContext<SandboxContextValue | undefined>(undefined);
-
-export interface SandboxProviderProps {
-  children: React.ReactNode;
-  initialStage?: ReleaseStage;
-  initialRole?: SupportRoleType;
-  initialPurchaseType?: PurchaseType;
-  initialFeatureScope?: FeatureScope;
-}
-
-export const SandboxProvider: React.FC<SandboxProviderProps> = ({
-  children,
-  initialStage = 'stage2-enhanced',
-  initialRole = 'super-admin',
-  initialPurchaseType = 'saas-subscription',
-  initialFeatureScope = 'DXPBK-2123',
-}) => {
-  const [releaseStage, setReleaseStage] = useState<ReleaseStage>(initialStage);
-  const [activeRole, setActiveRole] = useState<SupportRoleType>(initialRole);
-  const [purchaseType, setPurchaseType] = useState<PurchaseType>(initialPurchaseType);
-  const [featureScope, setFeatureScope] = useState<FeatureScope>(initialFeatureScope);
-  const [isDevNotesOpen, setIsDevNotesOpen] = useState<boolean>(true);
-
-  const allowedTiles = useMemo(() => {
-    return ROLE_DEFINITIONS[activeRole]?.allowedTiles || [];
-  }, [activeRole]);
-
-  const isTileAllowed = useCallback(
-    (tileId: string): boolean => {
-      return Array.isArray(allowedTiles) && allowedTiles.includes(tileId);
-    },
-    [allowedTiles]
-  );
-
-  const toggleDevNotes = useCallback(() => {
-    setIsDevNotesOpen((prev) => !prev);
-  }, []);
-
- // ---> YOUR CODE SNIPPET BELONGS RIGHT HERE <---
- const value = useMemo(
-  () => ({
-    releaseStage,
-    setReleaseStage,
-    activeRole,
-    repRole: activeRole,
-    setActiveRole,
-    purchaseType,
-    setPurchaseType,
-    featureScope,
-    setFeatureScope,
-    allowedTiles,
-    isTileAllowed,
-    isDevNotesOpen,
-    setIsDevNotesOpen,
-    toggleDevNotes,
-    deliveryStatus: 'all',
-    templateType: 'all',
-  }),
-  [
-    releaseStage,
-    activeRole,
-    purchaseType,
-    featureScope,
-    allowedTiles,
-    isTileAllowed,
-    isDevNotesOpen,
-    toggleDevNotes,
-  ]
-);
-
-return <SandboxContext.Provider value={value}>{children}</SandboxContext.Provider>;
-};
-
-export const useSandbox = (): SandboxContextValue => {
-  const context = useContext(SandboxContext);
-  if (!context) {
-    throw new Error('useSandbox must be used within a SandboxProvider');
-  }
-  return context;
-};
+export default SandboxContext;
