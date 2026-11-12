@@ -389,12 +389,24 @@ const PortalCard: React.FC<PortalCardProps> = ({
   const isTooltipOpen = activeTooltipId === tile.id;
   const tooltipText = `Links to ${tile.title} page.`;
 
-  // Dynamic outline icon resolution with safe search fallback
-  const outlineIcon = MODULE_OUTLINE_ICONS[tile.title] ?? (
-    <svg className="h-6 w-6 stroke-current" fill="none" viewBox="0 0 24 24" strokeWidth="2">
-      <circle cx="11" cy="11" r="7" />
-      <path d="m20 20-3.5-3.5" />
-    </svg>
+  const isStage2 = stage === 'stage2-enhanced';
+
+  const outlineIcon = isStage2 ? (
+    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#EBF4FA] p-2">
+      <img
+        src={`/icons/${tile.id}.svg`}
+        alt=""
+        aria-hidden="true"
+        className="h-5 w-5 object-contain [filter:brightness(0)_saturate(100%)_invert(24%)_sepia(96%)_saturate(1795%)_hue-rotate(187deg)_brightness(92%)_contrast(101%)]"
+      />
+    </div>
+  ) : (
+    <img
+      src={`/icons/${tile.id}.svg`}
+      alt=""
+      aria-hidden="true"
+      className="h-[42px] w-[42px] object-contain"
+    />
   );
 
 // ------------------------------------------------------------------------
@@ -418,11 +430,11 @@ const PortalCard: React.FC<PortalCardProps> = ({
           {outlineIcon}
         </div>
 
-        {/* Top-Aligned Title Container: Fixed h-11 Stabilizes 1-Line vs 2-Line Baseline */}
-        <div className="my-3 flex h-11 w-full items-start justify-center px-1">
-          <h3 className="text-sm font-bold leading-tight text-[#111315]">
+{/* Top-Aligned Title Container: Fixed h-11 Stabilizes 1-Line vs 2-Line Baseline */}
+<div className="my-3 flex h-11 w-full items-start justify-center px-1">
+          <h5 className="text-base font-bold leading-tight text-[#111315]">
             {tile.title}
-          </h3>
+          </h5>
         </div>
 
         {/* Full-Width Primary CTA with Top-Anchored Click Tooltip */}
@@ -581,7 +593,7 @@ export const HomePage: React.FC = () => {
             <p 
   aria-live="polite" 
   aria-atomic="true"
-  className="mt-1.5 w-full text-sm leading-normal text-[#5C6670]"
+  className="mt-1.5 w-full text-sm leading-normal text-[#252A2E]"
 >
   {heroContent.subtitle}
 </p>
