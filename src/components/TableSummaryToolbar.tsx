@@ -27,6 +27,14 @@ export function TableSummaryToolbar({
       ? '0 of 0'
       : `${rangeStart}-${rangeEnd} of ${totalCount.toLocaleString()}`;
 
+  const pageNavButtonClass = (enabled: boolean) =>
+    [
+      'flex h-8 w-8 items-center justify-center rounded border bg-white transition-colors focus:outline-none focus:ring-2 focus:ring-[#0063A3] disabled:cursor-not-allowed disabled:opacity-50',
+      enabled
+        ? 'border-[#525866] text-[#121212] hover:enabled:bg-[#F1F1F6]'
+        : 'border-[#CBCDD6] text-[#CBCDD6]',
+    ].join(' ');
+
   return (
     <div className="mt-0 flex w-full items-center justify-between border-b border-[#CBCDD6] px-4 py-3">
       <p className="text-sm font-bold text-[#121212]">
@@ -49,7 +57,7 @@ export function TableSummaryToolbar({
             type="button"
             disabled={!canGoPrev}
             aria-label="Previous page"
-            className="flex h-8 w-8 items-center justify-center rounded border border-[#CBCDD6] bg-white text-[#CBCDD6] transition-colors hover:enabled:border-[#525866] hover:enabled:bg-[#F1F1F6] hover:enabled:text-[#121212] focus:outline-none focus:ring-2 focus:ring-[#0063A3] disabled:cursor-not-allowed disabled:opacity-50"
+            className={pageNavButtonClass(canGoPrev)}
             onClick={onPrevPage}
           >
             <ChevronLeft className="h-4 w-4" aria-hidden />
@@ -59,7 +67,7 @@ export function TableSummaryToolbar({
             type="button"
             disabled={!canGoNext}
             aria-label="Next page"
-            className="flex h-8 w-8 items-center justify-center rounded border border-[#525866] bg-white text-[#121212] transition-colors hover:enabled:bg-[#F1F1F6] focus:outline-none focus:ring-2 focus:ring-[#0063A3] disabled:cursor-not-allowed disabled:opacity-50"
+            className={pageNavButtonClass(canGoNext)}
             onClick={onNextPage}
           >
             <ChevronRight className="h-4 w-4" aria-hidden />

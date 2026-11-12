@@ -1,54 +1,82 @@
-import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react';
-import { ChevronDown } from 'lucide-react';
 import {
-  AUDIT_JUSTIFICATION_OPTIONS,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
+import { useSearchParams } from 'react-router-dom';
+import { Forward, Mail, Reply } from 'lucide-react';
+import {
   auditJustificationLabel,
+  COMMUNICATION_ACTIONS_AUDIT_OPTIONS,
 } from '../../data/auditJustifications';
 import type { ActivityLogRecord } from '../../data/mockLogs';
 import {
   createRepCommunicationEntry,
   type AuditTimelineEntry,
 } from '../../types/communicationAudit';
+import { isValidEmailAddress, parseEmailListInput } from '../../utils/emailValidation';
 import { InlineFieldError } from '../InlineFieldError';
-import {
-  RecipientChipInput,
-  type RecipientChipModel,
-} from '../RecipientChipInput';
 import { ValidationLiveRegion } from '../ValidationLiveRegion';
+import {
+  AUDIT_JUSTIFICATION_SANDBOX_ERROR,
+  CommunicationActionsFieldAlert,
+} from './CommunicationActionsFieldAlert';
+import {
+  RECIPIENT_CHIP_FORMAT_ERROR,
+  RecipientChipField,
+  shouldUseRecipientChipLayout,
+} from './RecipientChipField';
+import {
+  communicationActionsSandboxPreset,
+  isSandboxDetailsError,
+  readSandboxSimError,
+  RECIPIENT_INLINE_READONLY_TO_EMAIL,
+} from '../../utils/sandboxErrorDeepLink';
 import { ActionButtonTooltip } from './ActionButtonTooltip';
 
-type CommActionTab = 'resend' | 'reply' | 'forward';
+type CommAction = 'resend' | 'reply' | 'forward';
 
-const ACTION_TYPE_TOOLTIPS: Record<CommActionTab, string> = {
+const ACTION_TYPE_TOOLTIPS: Record<CommAction, string> = {
   resend: 'Re-send original email to customer',
   reply: 'Send custom response to customer',
   forward: 'Forward thread to internal team',
 };
 
-const ACTION_BUTTON_ARIA_LABELS: Record<CommActionTab, string> = {
+const ACTION_BUTTON_ARIA_LABELS: Record<CommAction, string> = {
   resend: 'Resend Email: Re-send original email to customer',
   reply: 'Reply: Send custom response to customer',
   forward: 'Forward Email: Forward thread to internal team',
 };
 
-const COMM_FIELD_BASE =
-  'h-10 w-full rounded border border-[#CBCDD6] px-3 py-2 text-xs text-[#121212] focus:outline-none focus:ring-2 focus:ring-[#0063A3]';
-const COMM_FIELD_LOCKED =
-  'cursor-not-allowed bg-[#E2E8F0] text-[#525866] border border-[#CBCDD6]';
-const COMM_FIELD_EDITABLE = 'bg-white text-[#121212] border border-[#CBCDD6]';
+const ACTION_TAB_ICON_CLASS = 'h-4 w-4 shrink-0';
 
-const FORWARD_TO_ERROR = 'One or more recipient email addresses are invalid.';
 const SUBJECT_REQUIRED_ERROR = 'Subject line is required.';
+
+const LABEL_CLASS = 'mb-1 block text-xs font-medium text-gray-900';
+const INPUT_EDITABLE =
+  'w-full rounded border border-[#C4C9D0] bg-white px-3 py-2 text-xs text-gray-900 focus:border-[#0063A3] focus:outline-none focus:ring-1 focus:ring-[#0063A3]';
+const INPUT_INVALID =
+  'border-[#DA212C] focus:border-[#DA212C] focus:ring-[#DA212C]';
+const AUDIT_SELECT_SANDBOX_INVALID =
+  'border-[#A81E1E] focus:border-[#A81E1E] focus:ring-1 focus:ring-[#A81E1E]';
+const READONLY_VALUE =
+  'w-full cursor-default select-text rounded border border-[#C4C9D0] bg-[#DFE3E8] px-3 py-2 text-xs text-gray-800';
+const TEXTAREA_CLASS =
+  'w-full resize-y rounded border border-[#C4C9D0] bg-white px-3 py-2 text-xs text-gray-900 placeholder:text-gray-500 focus:border-[#0063A3] focus:outline-none focus:ring-1 focus:ring-[#0063A3]';
 
 type CommunicationActionsPanelProps = {
   log: ActivityLogRecord;
   onCommunicationLogged: (entry: AuditTimelineEntry) => void;
-  /** When true, form controls are non-interactive (horizon / scope preview). */
   readOnly?: boolean;
+  /** Stage 2+ — when false (MVP), hide audit justification and submit without it. */
+  showAuditJustification?: boolean;
 };
 
-function defaultSubjectForTab(tab: CommActionTab, originalSubject: string): string {
-  switch (tab) {
+function defaultSubjectForAction(action: CommAction, originalSubject: string): string {
+  switch (action) {
     case 'reply':
       return `Re: ${originalSubject}`;
     case 'forward':
@@ -58,69 +86,193 @@ function defaultSubjectForTab(tab: CommActionTab, originalSubject: string): stri
   }
 }
 
+function resolveInitialAction(searchParams: URLSearchParams): CommAction {
+  if (searchParams.get('action') === 'forward') {
+    return 'forward';
+  }
+  const simError = readSandboxSimError(searchParams);
+  if (simError === 'recipient-inline') {
+    return 'resend';
+  }
+  if (simError === 'subject-missing') {
+    return 'reply';
+  }
+  if (simError === 'justification-missing') {
+    return 'resend';
+  }
+  return 'resend';
+}
+
+function listFieldInvalid(raw: string, required: boolean): boolean {
+  const parts = parseEmailListInput(raw);
+  if (required && parts.length === 0) return true;
+  if (parts.length === 0) return false;
+  return parts.some((email) => !isValidEmailAddress(email));
+}
+
+function RequiredMark() {
+  return <span className="text-red-600">*</span>;
+}
+
 export function CommunicationActionsPanel({
   log,
   onCommunicationLogged,
   readOnly = false,
+  showAuditJustification = true,
 }: CommunicationActionsPanelProps) {
-  const [activeTab, setActiveTab] = useState<CommActionTab>('resend');
-  const [showCcBcc, setShowCcBcc] = useState(true);
-  const [lockedRecipientEmail] = useState(log.recipientEmail);
-  const [forwardToChips, setForwardToChips] = useState<RecipientChipModel[]>([]);
-  const [ccChips, setCcChips] = useState<RecipientChipModel[]>([]);
-  const [bccChips, setBccChips] = useState<RecipientChipModel[]>([]);
-  const [auditJustification, setAuditJustification] = useState('');
-  const [internalNote, setInternalNote] = useState('');
-  const [subjectLine, setSubjectLine] = useState(() =>
-    defaultSubjectForTab('resend', log.subject),
+  const [searchParams] = useSearchParams();
+  const [activeAction, setActiveAction] = useState<CommAction>(() =>
+    resolveInitialAction(searchParams),
   );
+
+  const [showCcBcc, setShowCcBcc] = useState(true);
+  const [forwardTo, setForwardTo] = useState('');
+  const [ccRecipients, setCcRecipients] = useState('');
+  const [bccRecipients, setBccRecipients] = useState('');
+  const [auditJustification, setAuditJustification] = useState('');
+  const [subjectLine, setSubjectLine] = useState(() =>
+    defaultSubjectForAction('resend', log.subject),
+  );
+  const [internalNote, setInternalNote] = useState('');
+
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [subjectTouched, setSubjectTouched] = useState(false);
   const [liveMessage, setLiveMessage] = useState('');
 
-  const activeAction = activeTab;
   const isToReadOnly = activeAction === 'resend' || activeAction === 'reply';
   const isSubjectReadOnly = activeAction === 'resend';
 
-  const primaryLabel =
-    activeTab === 'resend' ? 'Resend email' : activeTab === 'reply' ? 'Send reply' : 'Forward email';
-
   const forwardToInvalid =
-    activeAction === 'forward'
-    && (forwardToChips.length === 0 || forwardToChips.some((c) => !c.valid));
-
-  const ccInvalid = ccChips.some((c) => !c.valid);
-  const bccInvalid = bccChips.some((c) => !c.valid);
+    activeAction === 'forward' && listFieldInvalid(forwardTo, true);
+  const ccInvalid = listFieldInvalid(ccRecipients, false);
+  const bccInvalid = listFieldInvalid(bccRecipients, false);
   const auditMissing = auditJustification === '';
   const subjectEmpty = !isSubjectReadOnly && subjectLine.trim() === '';
   const showSubjectError = subjectEmpty && (subjectTouched || submitAttempted);
   const auditInvalid = submitAttempted && auditMissing;
+  const sandboxDetailsError = useMemo(() => {
+    const simError = readSandboxSimError(searchParams);
+    return isSandboxDetailsError(simError) ? simError : null;
+  }, [searchParams]);
+  const auditValidationActive =
+    showAuditJustification
+    && (sandboxDetailsError === 'justification-missing' || sandboxDetailsError === null);
+  const recipientValidationActive =
+    sandboxDetailsError === 'recipient-inline' || sandboxDetailsError === null;
+  const subjectValidationActive =
+    sandboxDetailsError === 'subject-missing' || sandboxDetailsError === null;
+  const showAuditInlineError = auditInvalid && auditValidationActive;
+  const showSubjectInlineError = showSubjectError && subjectValidationActive;
+  const recipientInlineSimulation = sandboxDetailsError === 'recipient-inline';
+  const showForwardToError =
+    activeAction === 'forward'
+    && recipientValidationActive
+    && forwardToInvalid
+    && submitAttempted;
+  const showCcError = recipientValidationActive && ccInvalid && submitAttempted;
+  const showBccError = recipientValidationActive && bccInvalid && submitAttempted;
+  const useForwardToChips =
+    activeAction === 'forward'
+    && shouldUseRecipientChipLayout(forwardTo, recipientInlineSimulation);
+  const useCcChips = shouldUseRecipientChipLayout(ccRecipients, recipientInlineSimulation);
+  const useBccChips = shouldUseRecipientChipLayout(bccRecipients, recipientInlineSimulation);
+  const chipInlineErrorMessage = recipientInlineSimulation
+    ? RECIPIENT_CHIP_FORMAT_ERROR
+    : undefined;
+  const toReadOnlyDisplay =
+    recipientInlineSimulation && isToReadOnly
+      ? RECIPIENT_INLINE_READONLY_TO_EMAIL
+      : log.recipientEmail;
 
-  const formHasErrors =
-    auditMissing || ccInvalid || bccInvalid || forwardToInvalid || subjectEmpty;
+  const primaryLabel =
+    activeAction === 'resend'
+      ? 'Resend email'
+      : activeAction === 'reply'
+        ? 'Send reply'
+        : 'Forward email';
 
   const validationAnnouncement = useMemo(() => {
-    if (forwardToInvalid) return FORWARD_TO_ERROR;
-    if (ccInvalid || bccInvalid) return 'Invalid email address in CC/BCC list.';
-    if (showSubjectError) return SUBJECT_REQUIRED_ERROR;
-    if (auditInvalid) return 'Select an audit justification before sending.';
+    if (showForwardToError || showCcError || showBccError) {
+      return RECIPIENT_CHIP_FORMAT_ERROR;
+    }
+    if (showSubjectInlineError) return SUBJECT_REQUIRED_ERROR;
+    if (showAuditInlineError) return AUDIT_JUSTIFICATION_SANDBOX_ERROR;
     return '';
-  }, [forwardToInvalid, ccInvalid, bccInvalid, showSubjectError, auditInvalid]);
+  }, [
+    showForwardToError,
+    showCcError,
+    showBccError,
+    showSubjectInlineError,
+    showAuditInlineError,
+    recipientInlineSimulation,
+  ]);
 
   useEffect(() => {
     if (validationAnnouncement) setLiveMessage(validationAnnouncement);
   }, [validationAnnouncement]);
 
-  const selectTab = useCallback(
-    (tab: CommActionTab) => {
-      setActiveTab(tab);
-      setForwardToChips([]);
-      setSubjectLine(defaultSubjectForTab(tab, log.subject));
-      setSubmitAttempted(false);
-      setSubjectTouched(false);
+  useEffect(() => {
+    const simError = readSandboxSimError(searchParams);
+    if (readOnly || !isSandboxDetailsError(simError)) {
+      return;
+    }
+    const preset = communicationActionsSandboxPreset(simError, log.subject);
+    setActiveAction(preset.activeAction);
+    setShowCcBcc(preset.showCcBcc);
+    setForwardTo(preset.forwardTo);
+    setCcRecipients(preset.ccRecipients);
+    setBccRecipients(preset.bccRecipients);
+    setAuditJustification(preset.auditJustification);
+    setSubjectLine(preset.subjectLine);
+    setSubmitAttempted(preset.submitAttempted);
+    setSubjectTouched(preset.subjectTouched);
+  }, [readOnly, searchParams, log.id, log.subject]);
+
+  useEffect(() => {
+    if (
+      sandboxDetailsError === 'recipient-inline'
+      || sandboxDetailsError === 'justification-missing'
+      || sandboxDetailsError === 'subject-missing'
+    ) {
+      setShowCcBcc(true);
+    }
+  }, [sandboxDetailsError, activeAction]);
+
+  const selectAction = useCallback(
+    (action: CommAction) => {
+      setActiveAction(action);
+      if (sandboxDetailsError === 'subject-missing') {
+        setSubjectLine(
+          action === 'resend' ? defaultSubjectForAction('resend', log.subject) : '',
+        );
+      } else {
+        setSubjectLine(defaultSubjectForAction(action, log.subject));
+      }
+      if (!sandboxDetailsError) {
+        setSubmitAttempted(false);
+        setSubjectTouched(false);
+      }
     },
-    [log.subject],
+    [log.subject, sandboxDetailsError],
   );
+
+  const handleCancel = useCallback(() => {
+    setForwardTo('');
+    setCcRecipients('');
+    setBccRecipients('');
+    setAuditJustification('');
+    setInternalNote('');
+    setSubmitAttempted(false);
+    setSubjectTouched(false);
+    setSubjectLine(defaultSubjectForAction(activeAction, log.subject));
+  }, [activeAction, log.subject]);
+
+  const formHasErrors =
+    (auditValidationActive && auditMissing)
+    || (recipientValidationActive && (ccInvalid || bccInvalid || forwardToInvalid))
+    || (subjectValidationActive && subjectEmpty);
+
+  const isSubmitDisabled = readOnly || formHasErrors;
 
   const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -129,260 +281,289 @@ export function CommunicationActionsPanel({
     setSubjectTouched(true);
     if (formHasErrors) return;
 
-    const recipient = isToReadOnly
-      ? lockedRecipientEmail
-      : forwardToChips.map((c) => c.address).join(', ');
+    const destination = isToReadOnly
+      ? log.recipientEmail
+      : parseEmailListInput(forwardTo).join(', ');
 
-    const justification = auditJustificationLabel(auditJustification);
-
+    const trimmedInternalNote = internalNote.trim();
     const entry = createRepCommunicationEntry({
-      tab: activeTab,
-      destinationEmail: recipient,
-      justification,
-      notes: internalNote.trim() || undefined,
+      tab: activeAction,
+      destinationEmail: destination,
+      justification: showAuditJustification
+        ? auditJustificationLabel(auditJustification)
+        : undefined,
+      notes: trimmedInternalNote || undefined,
     });
 
     onCommunicationLogged(entry);
-    setSubmitAttempted(false);
-    setSubjectTouched(false);
-    setAuditJustification('');
-    setInternalNote('');
-    setForwardToChips([]);
+    handleCancel();
   };
 
   return (
     <section
       aria-labelledby="communication-actions-heading"
-      className="w-full space-y-4 rounded-lg border border-[#CBCDD6] bg-white p-6"
+      className="w-full space-y-6 rounded-lg border border-[#CBCDD6] bg-white p-6"
     >
       <ValidationLiveRegion message={liveMessage} />
       <h2 id="communication-actions-heading" className="text-sm font-bold text-[#121212]">
         Communication Actions
       </h2>
 
-      {readOnly ? (
-        <p className="rounded border border-[#CBCDD6] bg-[#F8F9FA] px-3 py-2 text-[11px] text-[#525866]">
-          Communication actions are read-only for the current product horizon preview.
-        </p>
-      ) : null}
-
-      <fieldset disabled={readOnly} className="min-w-0 border-0 p-0">
       <div
         className="inline-flex rounded-md shadow-sm"
-        role="group"
-        aria-label="Communication Action Types"
+        role="tablist"
+        aria-label="Communication action types"
       >
-        <SegmentTab
+        <ActionSegmentTab
           tabId="resend"
           position="first"
-          active={activeTab === 'resend'}
+          active={activeAction === 'resend'}
           label="Resend Email"
           tooltip={ACTION_TYPE_TOOLTIPS.resend}
           ariaLabel={ACTION_BUTTON_ARIA_LABELS.resend}
-          onClick={() => selectTab('resend')}
+          icon={<Mail className={ACTION_TAB_ICON_CLASS} aria-hidden strokeWidth={1.75} />}
+          onClick={() => selectAction('resend')}
         />
-        <SegmentTab
+        <ActionSegmentTab
           tabId="reply"
           position="middle"
-          active={activeTab === 'reply'}
+          active={activeAction === 'reply'}
           label="Reply"
           tooltip={ACTION_TYPE_TOOLTIPS.reply}
           ariaLabel={ACTION_BUTTON_ARIA_LABELS.reply}
-          onClick={() => selectTab('reply')}
+          icon={<Reply className={ACTION_TAB_ICON_CLASS} aria-hidden strokeWidth={1.75} />}
+          onClick={() => selectAction('reply')}
         />
-        <SegmentTab
+        <ActionSegmentTab
           tabId="forward"
           position="last"
-          active={activeTab === 'forward'}
+          active={activeAction === 'forward'}
           label="Forward Email"
           tooltip={ACTION_TYPE_TOOLTIPS.forward}
           ariaLabel={ACTION_BUTTON_ARIA_LABELS.forward}
-          onClick={() => selectTab('forward')}
+          icon={<Forward className={ACTION_TAB_ICON_CLASS} aria-hidden strokeWidth={1.75} />}
+          onClick={() => selectAction('forward')}
         />
       </div>
 
-      <form className="flex w-full flex-col gap-3 pt-2" onSubmit={handleSubmit} noValidate>
-        {isToReadOnly ? (
-          <div className="flex flex-col gap-1">
-            <label htmlFor="comm-to-recipient" className="text-xs font-bold text-[#121212]">
-              To <span className="text-[#DA212C]">*</span>
-            </label>
-            <input
-              id="comm-to-recipient"
-              type="text"
-              readOnly
-              disabled
-              aria-readonly
-              value={lockedRecipientEmail}
-              className={[COMM_FIELD_BASE, COMM_FIELD_LOCKED].join(' ')}
-            />
-          </div>
-        ) : (
-          <RecipientChipInput
-            label="To"
-            required
-            inputId="comm-to-forward"
-            chips={forwardToChips}
-            onChipsChange={setForwardToChips}
-            placeholder="Add recipient emails separated by commas"
-            invalidListMessage={FORWARD_TO_ERROR}
-            externalInvalid={
-              forwardToInvalid && (submitAttempted || forwardToChips.length > 0)
-            }
-            externalErrorMessage={
-              forwardToInvalid && (submitAttempted || forwardToChips.length > 0)
-                ? FORWARD_TO_ERROR
-                : undefined
-            }
-          />
-        )}
-
-        <button
-          type="button"
-          className="w-fit text-xs font-bold text-[#121212] hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3]"
-          aria-expanded={showCcBcc}
-          onClick={() => setShowCcBcc((open) => !open)}
+      <fieldset className="min-w-0 border-0 p-0">
+        <form
+          className="flex w-full flex-col gap-6"
+          onSubmit={handleSubmit}
+          noValidate
+          aria-readonly={readOnly || undefined}
         >
-          {showCcBcc ? '- Hide CC / BCC' : '+ Show CC / BCC'}
-        </button>
-
-        {showCcBcc ? (
-          <>
-            <RecipientChipInput
-              label="CC"
-              inputId="comm-cc-recipients"
-              chips={ccChips}
-              onChipsChange={setCcChips}
-              placeholder="Add CC emails separated by commas"
+          {isToReadOnly ? (
+            <div>
+              <label className={LABEL_CLASS}>
+                To <RequiredMark />
+              </label>
+              <div className={READONLY_VALUE}>{toReadOnlyDisplay}</div>
+            </div>
+          ) : (
+            <RecipientChipField
+              id="comm-to-forward"
+              errorId="comm-to-forward-error"
+              label={
+                <>
+                  To <RequiredMark />
+                </>
+              }
+              value={forwardTo}
+              disabled={readOnly}
+              showError={showForwardToError}
+              useChipLayout={useForwardToChips}
+              placeholder="Add emails separated by commas"
+              inlineErrorMessage={chipInlineErrorMessage}
+              onChange={setForwardTo}
             />
-            <RecipientChipInput
-              label="BCC"
-              inputId="comm-bcc-recipients"
-              chips={bccChips}
-              onChipsChange={setBccChips}
-              placeholder="Add BCC emails separated by commas"
-            />
-          </>
-        ) : null}
+          )}
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="audit-justification" className="text-xs font-bold text-[#121212]">
-            Audit justification <span className="text-[#DA212C]">*</span>
-          </label>
-          <div className="relative">
-            <select
-              id="audit-justification"
-              value={auditJustification}
-              aria-invalid={auditInvalid || undefined}
-              aria-describedby={auditInvalid ? 'audit-justification-error' : undefined}
+          <div className="my-2">
+            <button
+              type="button"
+              disabled={readOnly}
+              onClick={() => setShowCcBcc((prev) => !prev)}
+              aria-expanded={showCcBcc}
+              aria-controls="cc-bcc-wrapper"
               className={[
-                'h-10 w-full cursor-pointer appearance-none rounded border bg-white pl-3 pr-9 text-xs text-[#121212] focus:outline-none focus:ring-2 focus:ring-[#0063A3]',
-                auditInvalid ? 'border-[#DA212C] focus:ring-[#DA212C]' : 'border-[#CBCDD6]',
+                'flex cursor-pointer items-center gap-1 border-0 bg-transparent py-0.5 text-xs !font-bold shadow-none outline-none',
+                showCcBcc ? 'text-[#0063A3]' : 'text-gray-900 hover:text-[#0063A3]',
+                'focus:outline-none focus-visible:underline',
+                'disabled:cursor-not-allowed disabled:!font-bold disabled:opacity-50',
               ].join(' ')}
-              onChange={(e) => setAuditJustification(e.target.value)}
             >
-              {AUDIT_JUSTIFICATION_OPTIONS.map((opt) => (
-                <option key={opt.value || 'placeholder'} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-            <ChevronDown
-              className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#525866]"
-              aria-hidden
+              <span className="!font-bold">
+                {showCcBcc ? '- Hide CC / BCC' : '+ Show CC / BCC'}
+              </span>
+              <span className="text-[10px]" aria-hidden>
+                {showCcBcc ? '▲' : '▼'}
+              </span>
+            </button>
+          </div>
+
+          {showCcBcc ? (
+            <div id="cc-bcc-wrapper" className="mb-3 space-y-3">
+              <RecipientChipField
+                id="cc-input"
+                errorId="cc-input-error"
+                label="CC"
+                value={ccRecipients}
+                disabled={readOnly}
+                showError={showCcError}
+                useChipLayout={useCcChips}
+                placeholder="Add CC emails separated by commas"
+                inlineErrorMessage={chipInlineErrorMessage}
+                onChange={setCcRecipients}
+              />
+              <RecipientChipField
+                id="bcc-input"
+                errorId="bcc-input-error"
+                label="BCC"
+                value={bccRecipients}
+                disabled={readOnly}
+                showError={showBccError}
+                useChipLayout={useBccChips}
+                placeholder="Add BCC emails separated by commas"
+                inlineErrorMessage={chipInlineErrorMessage}
+                onChange={setBccRecipients}
+              />
+            </div>
+          ) : null}
+
+          {showAuditJustification ? (
+            <div className="mb-3">
+              <label htmlFor="audit-justification" className={LABEL_CLASS}>
+                Audit justification <RequiredMark />
+              </label>
+              <select
+                id="audit-justification"
+                name="audit-justification"
+                value={auditJustification}
+                disabled={readOnly}
+                aria-invalid={showAuditInlineError || undefined}
+                aria-describedby={showAuditInlineError ? 'audit-justification-error' : undefined}
+                className={[
+                  sandboxDetailsError === 'justification-missing' && showAuditInlineError
+                    ? 'w-full cursor-pointer rounded border bg-white px-3 py-2 text-xs text-gray-900 outline-none'
+                    : INPUT_EDITABLE,
+                  'cursor-pointer outline-none',
+                  showAuditInlineError
+                    ? sandboxDetailsError === 'justification-missing'
+                      ? AUDIT_SELECT_SANDBOX_INVALID
+                      : INPUT_INVALID
+                    : '',
+                ].join(' ')}
+                onChange={(e) => setAuditJustification(e.target.value)}
+              >
+                {COMMUNICATION_ACTIONS_AUDIT_OPTIONS.map((opt) => (
+                  <option key={opt.value || 'placeholder'} value={opt.value} disabled={!opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+              {showAuditInlineError ? (
+                <CommunicationActionsFieldAlert
+                  id="audit-justification-error"
+                  message={AUDIT_JUSTIFICATION_SANDBOX_ERROR}
+                />
+              ) : null}
+            </div>
+          ) : null}
+
+          <div>
+            <label htmlFor="comm-subject" className={LABEL_CLASS}>
+              Subject line
+            </label>
+            {isSubjectReadOnly ? (
+              <div id="comm-subject" className={READONLY_VALUE}>
+                {subjectLine}
+              </div>
+            ) : (
+              <>
+                <input
+                  id="comm-subject"
+                  type="text"
+                  value={subjectLine}
+                  disabled={readOnly}
+                  aria-invalid={showSubjectInlineError || undefined}
+                  aria-describedby={showSubjectInlineError ? 'comm-subject-error' : undefined}
+                  className={[
+                    INPUT_EDITABLE,
+                    showSubjectInlineError ? INPUT_INVALID : '',
+                  ].join(' ')}
+                  onChange={(e) => setSubjectLine(e.target.value)}
+                  onBlur={() => setSubjectTouched(true)}
+                />
+                {showSubjectInlineError ? (
+                  <InlineFieldError id="comm-subject-error" message={SUBJECT_REQUIRED_ERROR} />
+                ) : null}
+              </>
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="internal-audit-note" className={LABEL_CLASS}>
+              Internal audit note{' '}
+              <span className="font-normal text-gray-500">(Optional)</span>
+            </label>
+            <textarea
+              id="internal-audit-note"
+              rows={3}
+              value={internalNote}
+              disabled={readOnly}
+              placeholder="Add context for secondary recipients or compliance reviewers."
+              className={TEXTAREA_CLASS}
+              onChange={(e) => setInternalNote(e.target.value)}
             />
           </div>
-          {auditInvalid ? (
-            <InlineFieldError
-              id="audit-justification-error"
-              message="Select an audit justification before sending."
-            />
-          ) : null}
-        </div>
 
-        <div className="flex flex-col gap-1">
-          <label htmlFor="comm-subject" className="text-xs font-bold text-[#121212]">
-            Subject Line
-          </label>
-          <input
-            id="comm-subject"
-            type="text"
-            readOnly={isSubjectReadOnly}
-            disabled={isSubjectReadOnly}
-            aria-readonly={isSubjectReadOnly ? true : undefined}
-            aria-invalid={showSubjectError ? true : undefined}
-            aria-describedby={showSubjectError ? 'comm-subject-error' : undefined}
-            value={subjectLine}
-            className={[
-              COMM_FIELD_BASE,
-              isSubjectReadOnly ? COMM_FIELD_LOCKED : COMM_FIELD_EDITABLE,
-              showSubjectError ? 'border-[#DA212C] focus:ring-[#DA212C]' : '',
-            ].join(' ')}
-            onChange={(e) => {
-              if (!isSubjectReadOnly) setSubjectLine(e.target.value);
-            }}
-            onBlur={() => setSubjectTouched(true)}
-          />
-          {showSubjectError ? (
-            <InlineFieldError id="comm-subject-error" message={SUBJECT_REQUIRED_ERROR} />
-          ) : null}
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <label htmlFor="internal-audit-note" className="text-xs font-bold text-[#121212]">
-            Internal audit note <span className="font-normal text-[#525866]">(Optional)</span>
-          </label>
-          <textarea
-            id="internal-audit-note"
-            rows={3}
-            value={internalNote}
-            placeholder="Add context for secondary recipients or compliance reviewers."
-            className="w-full resize-y rounded border border-[#CBCDD6] bg-white px-3 py-2 text-xs text-[#121212] placeholder:text-[#525866] focus:outline-none focus:ring-2 focus:ring-[#0063A3]"
-            onChange={(e) => setInternalNote(e.target.value)}
-          />
-        </div>
-
-        <div className="flex flex-wrap justify-end gap-3 pt-2">
-          <button
-            type="button"
-            className="inline-flex h-9 items-center justify-center rounded border border-[#0063A3] bg-white px-4 text-xs font-semibold text-[#0063A3] hover:bg-[#F0F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3]"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={readOnly || formHasErrors}
-            className={[
-              'inline-flex h-9 items-center justify-center rounded px-4 text-xs font-semibold text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-1',
-              formHasErrors
-                ? 'cursor-not-allowed bg-[#0063A3] opacity-50'
-                : 'bg-[#0063A3] hover:bg-[#004B7A]',
-            ].join(' ')}
-          >
-            {primaryLabel}
-          </button>
-        </div>
-      </form>
+          <div className="flex flex-wrap justify-end gap-3">
+            <button
+              type="button"
+              disabled={readOnly}
+              className="inline-flex items-center justify-center rounded border border-[#0063A3] bg-white px-4 py-2 text-xs !font-bold text-[#0063A3] hover:bg-[#F0F7FC] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] disabled:cursor-not-allowed disabled:!font-bold disabled:opacity-50"
+              onClick={handleCancel}
+            >
+              <span className="!font-bold">Cancel</span>
+            </button>
+            <button
+              type="submit"
+              disabled={isSubmitDisabled}
+              aria-disabled={isSubmitDisabled}
+              className={[
+                'rounded px-4 py-2 text-xs !font-bold text-white shadow-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-1 disabled:!font-bold',
+                isSubmitDisabled
+                  ? 'cursor-not-allowed bg-[#0063A3] opacity-50'
+                  : 'cursor-pointer bg-[#0063A3] hover:bg-[#004f82]',
+              ].join(' ')}
+            >
+              <span className="!font-bold">{primaryLabel}</span>
+            </button>
+          </div>
+        </form>
       </fieldset>
     </section>
   );
 }
 
-function SegmentTab({
+function ActionSegmentTab({
   tabId,
   position,
   active,
   label,
   tooltip,
   ariaLabel,
+  icon,
   onClick,
 }: {
-  tabId: CommActionTab;
+  tabId: CommAction;
   position: 'first' | 'middle' | 'last';
   active: boolean;
   label: string;
   tooltip: string;
   ariaLabel: string;
+  icon: ReactNode;
   onClick: () => void;
 }) {
   const radius =
@@ -395,7 +576,7 @@ function SegmentTab({
   const border =
     position === 'first'
       ? 'border border-[#0063A3]'
-      : 'border-t border-b border-r border-[#0063A3] -ml-px';
+      : 'border border-l-0 border-[#0063A3]';
 
   const tooltipDomId = `comm-action-tooltip-${tabId}`;
 
@@ -403,20 +584,23 @@ function SegmentTab({
     <ActionButtonTooltip tooltipId={tooltipDomId} content={tooltip}>
       <button
         type="button"
-        aria-pressed={active}
+        role="tab"
+        aria-selected={active}
         aria-label={ariaLabel}
         className={[
-          'inline-flex h-9 items-center gap-1.5 px-4 text-xs focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-1',
+          'relative flex items-center gap-2 px-4 py-2 text-xs !font-bold focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-1 disabled:!font-bold',
           radius,
           border,
           active
-            ? 'relative z-10 bg-[#0063A3] font-semibold text-white'
-            : 'bg-white font-semibold text-[#0063A3] hover:bg-[#F0F7FC]',
+            ? 'z-10 bg-[#0063A3] text-white'
+            : 'bg-white text-[#0063A3] hover:bg-[#F0F7FC]',
         ].join(' ')}
         onClick={onClick}
       >
-        {label}
+        {icon}
+        <span className="!font-bold">{label}</span>
       </button>
     </ActionButtonTooltip>
   );
 }
+

@@ -53,17 +53,14 @@ function ZeroResultsClearButton({ onClearSearchAndFilters }: { onClearSearchAndF
 
 /** State 1 — primary search bar returned 0 rows. */
 export function SearchTermZeroResultsCard({
-  searchQuery,
   onClearSearchAndFilters,
-}: Omit<ActivityLogsZeroResultsCardProps, 'variant'>) {
-  const displayQuery = searchQuery.trim();
-
+}: Pick<ActivityLogsZeroResultsCardProps, 'onClearSearchAndFilters'>) {
   return (
     <div role="status" aria-live="polite" className={CARD_CLASS}>
       <ZeroResultsIcon />
       <h2 className="mb-2 text-base font-bold text-[#121212]">No matching email records found</h2>
       <p className="mb-4 text-xs text-[#525866]">
-        No activity logs matched your query &quot;{displayQuery}&quot;.
+        No activity logs matched your active filter parameters.
       </p>
       <ZeroResultsTroubleshootingList />
       <ZeroResultsClearButton onClearSearchAndFilters={onClearSearchAndFilters} />
@@ -90,15 +87,12 @@ export function AdvancedFiltersZeroResultsCard({
 
 export function ActivityLogsZeroResultsCard({
   variant,
-  searchQuery,
+  searchQuery: _searchQuery,
   onClearSearchAndFilters,
 }: ActivityLogsZeroResultsCardProps) {
   if (variant === 'search') {
     return (
-      <SearchTermZeroResultsCard
-        searchQuery={searchQuery}
-        onClearSearchAndFilters={onClearSearchAndFilters}
-      />
+      <SearchTermZeroResultsCard onClearSearchAndFilters={onClearSearchAndFilters} />
     );
   }
   return <AdvancedFiltersZeroResultsCard onClearSearchAndFilters={onClearSearchAndFilters} />;
