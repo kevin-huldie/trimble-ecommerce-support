@@ -7,7 +7,7 @@ import {
   type ReactNode,
 } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Forward, Mail, Reply } from 'lucide-react';
+import { Forward, Mail } from 'lucide-react';
 import {
   auditJustificationLabel,
   COMMUNICATION_ACTIONS_AUDIT_OPTIONS,
@@ -324,7 +324,7 @@ export function CommunicationActionsPanel({
           icon={<Mail className={ACTION_TAB_ICON_CLASS} aria-hidden strokeWidth={1.75} />}
           onClick={() => selectAction('resend')}
         />
-        <ActionSegmentTab
+{/* <ActionSegmentTab
           tabId="reply"
           position="middle"
           active={activeAction === 'reply'}
@@ -333,7 +333,7 @@ export function CommunicationActionsPanel({
           ariaLabel={ACTION_BUTTON_ARIA_LABELS.reply}
           icon={<Reply className={ACTION_TAB_ICON_CLASS} aria-hidden strokeWidth={1.75} />}
           onClick={() => selectAction('reply')}
-        />
+        /> */}
         <ActionSegmentTab
           tabId="forward"
           position="last"
