@@ -12,6 +12,8 @@ export function getStatusBadgeStyle(status: LogDeliveryStatus | string): string 
       return 'bg-[#0063A3] text-white'; // Default (Modus Blue)
     case 'Held':
       return 'bg-[#333742] text-white'; // Secondary (Dark Gray)
+    case 'Dropped':
+      return 'bg-[#E36C09] text-white'; // Spam / firewall block
     default:
       return 'bg-[#525866] text-white';
   }

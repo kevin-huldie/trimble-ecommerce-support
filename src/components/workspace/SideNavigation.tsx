@@ -46,6 +46,8 @@ type SideNavigationProps = {
   onNavChange: (nav: SidebarNavId) => void;
   bouncedCount: number;
   deferredCount: number;
+  /** Stage 1: MVP — show only All logs. */
+  stage1Mvp?: boolean;
 };
 
 function NavSectionTitle({ children }: { children: string }) {
@@ -115,6 +117,7 @@ export function SideNavigation({
   onNavChange,
   bouncedCount,
   deferredCount,
+  stage1Mvp = false,
 }: SideNavigationProps) {
   return (
     <nav aria-label="Email activity logs">
@@ -127,6 +130,8 @@ export function SideNavigation({
         onClick={onNavChange}
         developerDescription={NAV_DEVELOPER_DESCRIPTIONS['all-logs']}
       />
+      {stage1Mvp ? null : (
+        <>
       <SidebarItem
         id="resend-history"
         label="Resend history"
@@ -183,6 +188,8 @@ export function SideNavigation({
         badgeTone="warning"
         developerDescription={NAV_DEVELOPER_DESCRIPTIONS['queue-deferred']}
       />
+        </>
+      )}
     </nav>
   );
 }

@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import {
   Edit,
@@ -12,12 +13,11 @@ import {
 import { Link } from 'react-router-dom';
 import { PortalShell } from '../components/PortalShell';
 
-const OUT_OF_SCOPE_TOOLTIP = 'This is not part of the email repository ticket';
-
 type HomeTile = {
   id: string;
   title: string;
   icon: LucideIcon;
+  actionLabel?: string;
 };
 
 const TILES: HomeTile[] = [
@@ -40,14 +40,63 @@ const TILES: HomeTile[] = [
   { id: 'email-activity-logs', title: 'Email Activity Logs', icon: Mail },
 ];
 
-const OUT_OF_SCOPE_DESC_ID = 'home-out-of-scope-description';
+/** Visually active tiles with no route in the baseline prototype. */
+const TOOLTIP_ONLY_TILE_IDS = new Set<string>([
+  'order-details',
+  'returns',
+  'releasing-holds',
+  'tax-exempt-holds',
+  'reprocess-failed',
+  'cancel-orders',
+  'refund-orders',
+  'reports',
+]);
 
-function tileHref(tileId: string): string | null {
-  if (tileId === 'email-activity-logs') return '/logs';
-  return null;
+function homeTileTooltipMessage(title: string): string {
+  return `Navigates to ${title} flow`;
+}
+
+function isTooltipOnlyTile(tileId: string): boolean {
+  return TOOLTIP_ONLY_TILE_IDS.has(tileId);
 }
 
 export function HomePage() {
+  const [activeTooltipId, setActiveTooltipId] = useState<string | null>(null);
+  const gridRef = useRef<HTMLUListElement>(null);
+
+  const handleToggleTooltip = useCallback((event: MouseEvent, cardId: string) => {
+    event.preventDefault();
+    event.stopPropagation();
+    setActiveTooltipId((prev) => (prev === cardId ? null : cardId));
+  }, []);
+
+  useEffect(() => {
+    if (!activeTooltipId) return undefined;
+    const timer = window.setTimeout(() => setActiveTooltipId(null), 4000);
+    return () => window.clearTimeout(timer);
+  }, [activeTooltipId]);
+
+  useEffect(() => {
+    if (!activeTooltipId) return undefined;
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setActiveTooltipId(null);
+    };
+
+    const onPointerDown = (event: globalThis.MouseEvent) => {
+      const target = event.target as Node;
+      if (gridRef.current?.contains(target)) return;
+      setActiveTooltipId(null);
+    };
+
+    document.addEventListener('keydown', onKeyDown);
+    document.addEventListener('mousedown', onPointerDown);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('mousedown', onPointerDown);
+    };
+  }, [activeTooltipId]);
+
   return (
     <PortalShell hideSidebar contentClassName="bg-[#F4F5F7] text-[#252525]">
       <main id="main-content" role="main" className="min-h-screen px-4 py-12 sm:px-8">
@@ -64,44 +113,37 @@ export function HomePage() {
         <section
           role="region"
           aria-labelledby="home-categories-heading"
-          className="mx-auto w-full max-w-7xl"
+          className="mx-auto w-full max-w-7xl overflow-visible"
         >
           <h2 id="home-categories-heading" className="sr-only">
             Support categories
           </h2>
-          <p id={OUT_OF_SCOPE_DESC_ID} className="sr-only">
-            {OUT_OF_SCOPE_TOOLTIP}
-          </p>
 
           <ul
+            ref={gridRef}
             role="grid"
             aria-rowcount={2}
             aria-colcount={5}
             aria-label="Support category tiles"
             aria-describedby="home-page-intro"
-            className="home-category-grid list-none p-0"
+            className="home-category-grid list-none overflow-visible p-0"
           >
             {TILES.map((tile, index) => {
-              const isActive = tile.id === 'email-activity-logs';
-              const href = tileHref(tile.id);
               const Icon = tile.icon;
               const rowIndex = Math.floor(index / 5) + 1;
               const colIndex = (index % 5) + 1;
+              const tooltipOnly = isTooltipOnlyTile(tile.id);
+              const tooltipId = `tooltip-${tile.id}`;
+              const actionLabel = tile.actionLabel ?? 'Get started';
 
               return (
-                <li key={tile.id} role="presentation" className="min-w-0">
+                <li key={tile.id} role="presentation" className="relative min-w-0 overflow-visible">
                   <article
                     role="gridcell"
                     aria-rowindex={rowIndex}
                     aria-colindex={colIndex}
                     aria-labelledby={`${tile.id}-title`}
-                    aria-disabled={!isActive}
-                    className={[
-                      'flex h-full min-h-[200px] flex-col items-center justify-between rounded border border-[#E0E0E0] bg-white p-6 text-center shadow-[0_2px_4px_rgba(0,0,0,0.06)] transition-shadow transition-opacity',
-                      isActive
-                        ? 'hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.1)]'
-                        : 'opacity-70',
-                    ].join(' ')}
+                    className="flex h-full min-h-[200px] flex-col items-center justify-between overflow-visible rounded border border-[#E0E0E0] bg-white p-6 text-center shadow-[0_2px_4px_rgba(0,0,0,0.06)] transition-shadow transition-opacity hover:shadow-[0_2px_8px_rgba(0,0,0,0.1)] focus-within:shadow-[0_2px_8px_rgba(0,0,0,0.1)]"
                   >
                     <div className="mt-2 flex flex-col items-center">
                       <Icon
@@ -117,26 +159,45 @@ export function HomePage() {
                       </h3>
                     </div>
 
-                    <div className="mt-6 w-full">
-                      {isActive && href ? (
-                        <Link
-                          to={href}
-                          className="block w-full rounded bg-[#0063A3] px-3 py-2 text-center text-xs font-semibold text-white transition-colors hover:bg-[#004B7A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-2"
-                        >
-                          Get started
-                        </Link>
+                    <div className="mt-6 w-full overflow-visible">
+                      {tooltipOnly ? (
+                        <div className="relative inline-block w-full">
+                          {activeTooltipId === tile.id ? (
+                            <div
+                              id={tooltipId}
+                              role="status"
+                              aria-live="polite"
+                              className="pointer-events-auto absolute bottom-full left-1/2 z-40 mb-2.5 -translate-x-1/2 whitespace-nowrap rounded border border-[#3B424C] bg-[#1E2227] px-3 py-1.5 text-xs font-medium text-white shadow-xl"
+                            >
+                              {homeTileTooltipMessage(tile.title)}
+                              <div
+                                aria-hidden
+                                className="absolute left-1/2 top-full h-0 w-0 -translate-x-1/2 border-x-4 border-x-transparent border-t-4 border-t-[#1E2227]"
+                              />
+                              <div
+                                aria-hidden
+                                className="absolute left-1/2 top-full -z-10 h-0 w-0 -translate-x-1/2 border-x-[5px] border-x-transparent border-t-[5px] border-t-[#3B424C]"
+                              />
+                            </div>
+                          ) : null}
+                          <button
+                            type="button"
+                            aria-describedby={
+                              activeTooltipId === tile.id ? tooltipId : undefined
+                            }
+                            className="w-full rounded bg-[#0063A3] px-3 py-1.5 text-xs font-bold text-white transition-colors hover:bg-[#004f82] focus:outline-none focus:ring-2 focus:ring-[#0063A3] focus:ring-offset-1"
+                            onClick={(event) => handleToggleTooltip(event, tile.id)}
+                          >
+                            {actionLabel}
+                          </button>
+                        </div>
                       ) : (
-                        <button
-                          type="button"
-                          disabled
-                          aria-disabled="true"
-                          aria-describedby={OUT_OF_SCOPE_DESC_ID}
-                          title={OUT_OF_SCOPE_TOOLTIP}
-                          tabIndex={-1}
-                          className="pointer-events-none block w-full cursor-not-allowed rounded bg-[#0063A3] px-3 py-2 text-center text-xs font-semibold text-white opacity-60"
+                        <Link
+                          to="/logs"
+                          className="block w-full rounded bg-[#0063A3] px-3 py-2 text-center text-xs font-bold text-white transition-colors hover:bg-[#004B7A] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0063A3] focus-visible:ring-offset-2"
                         >
-                          Get started
-                        </button>
+                          {actionLabel}
+                        </Link>
                       )}
                     </div>
                   </article>
@@ -145,8 +206,6 @@ export function HomePage() {
             })}
           </ul>
         </section>
-
-        <div role="status" aria-live="polite" aria-atomic="true" className="sr-only" />
       </main>
     </PortalShell>
   );

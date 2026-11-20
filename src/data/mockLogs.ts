@@ -336,13 +336,21 @@ export function getActivityLogById(id: string): ActivityLogRecord | undefined {
   return MOCK_ACTIVITY_LOGS.find((log) => log.id === id);
 }
 
+/** Trimble account segment from Figma-style display order id (e.g. `00000000000-0000`). */
+export function logAccountId(log: ActivityLogRecord): string {
+  return log.displayOrderId.split('-')[0] ?? log.displayOrderId;
+}
+
 export function activityLogToEmailLog(log: ActivityLogRecord): EmailLog {
+  const customerName = `${log.recipientFirstName} ${log.recipientLastName}`.trim();
   return {
     id: log.id,
-    recipientName: `${log.recipientFirstName} ${log.recipientLastName}`.trim(),
+    customerName,
+    recipientName: customerName,
     recipientEmail: log.recipientEmail,
-    accountNumber: log.displayOrderId.split('-')[0] ?? '',
+    accountNumber: logAccountId(log),
     orderId: log.orderId,
+    subjectLine: log.subject,
     triggeringEvent: log.triggeringEvent,
     sendgridTemplateId: log.sendGridTemplateId,
     status: log.deliveryStatus,

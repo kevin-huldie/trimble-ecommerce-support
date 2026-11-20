@@ -1,5 +1,11 @@
-import { useCallback, useId, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useState, type FormEvent, type KeyboardEvent } from 'react';
 import type { ActivityLogRecord } from '../../data/mockLogs';
+import {
+  consentCheckboxDefaultChecked,
+  consentCheckboxDisabled,
+  consentRequiredForSubmit,
+  useSandbox,
+} from '../../context/SandboxContext';
 import { formatCommunicationSuccessToastMessage } from '../../utils/successToastMessages';
 import { createRepCommunicationEntry, type AuditTimelineEntry } from '../../types/communicationAudit';
 import { InlineFieldError } from '../InlineFieldError';
@@ -43,6 +49,7 @@ export function CommunicationActionsForm({
   onCommunicationLogged,
   onSuccessToast,
 }: CommunicationActionsFormProps) {
+  const { consentMode, featureScope } = useSandbox();
   const tablistId = useId();
   const [activeTab, setActiveTab] = useState<CommActionTab>('resend');
   const [recipientEmail, setRecipientEmail] = useState(log.recipientEmail);
@@ -51,6 +58,18 @@ export function CommunicationActionsForm({
   const [isConsentChecked, setIsConsentChecked] = useState(false);
   const [submitAttempted, setSubmitAttempted] = useState(false);
   const [liveMessage, setLiveMessage] = useState('');
+
+  const consentApplies = featureScope === 'DXPBK-1900';
+  const consentRequired = consentApplies && consentRequiredForSubmit(consentMode);
+  const consentDisabled = consentApplies && consentCheckboxDisabled(consentMode);
+  const consentHidden = consentApplies && consentMode === 'bypass-admin-audit';
+
+  useEffect(() => {
+    if (!consentApplies) {
+      return;
+    }
+    setIsConsentChecked(consentCheckboxDefaultChecked(consentMode));
+  }, [consentApplies, consentMode]);
 
   const isSubjectLocked = activeTab === 'resend';
   const recipientReadOnly =
@@ -74,9 +93,11 @@ export function CommunicationActionsForm({
       setIsEditingRecipient(false);
       setSubjectLine(defaultSubjectForTab(tab, log.subject));
       setSubmitAttempted(false);
-      setIsConsentChecked(false);
+      setIsConsentChecked(
+        consentApplies ? consentCheckboxDefaultChecked(consentMode) : false,
+      );
     },
-    [log.recipientEmail, log.subject],
+    [consentApplies, consentMode, log.recipientEmail, log.subject],
   );
 
   const handleTabKeyDown = (event: KeyboardEvent<HTMLButtonElement>, tab: CommActionTab) => {
@@ -100,8 +121,9 @@ export function CommunicationActionsForm({
       && !recipientInvalid
       && (activeTab === 'forward' || !isEditingRecipient || EMAIL_PATTERN.test(recipientEmail.trim()));
 
-    if (!isConsentChecked || !recipientOk || subjectEmpty) {
-      if (!isConsentChecked) {
+    const consentOk = !consentRequired || isConsentChecked;
+    if (!consentOk || !recipientOk || subjectEmpty) {
+      if (!consentOk) {
         setLiveMessage('Accept the privacy and support protocols confirmation before sending.');
       } else if (showRecipientError || recipientEmpty || recipientInvalid) {
         setLiveMessage('Enter a valid recipient email address.');
@@ -121,12 +143,14 @@ export function CommunicationActionsForm({
       formatCommunicationSuccessToastMessage(entry.actionBadge, entry.destinationEmail),
     );
     setSubmitAttempted(false);
-    setIsConsentChecked(false);
+    setIsConsentChecked(
+      consentApplies ? consentCheckboxDefaultChecked(consentMode) : false,
+    );
     setIsEditingRecipient(false);
     setLiveMessage('');
   };
 
-  const submitDisabled = !isConsentChecked;
+  const submitDisabled = consentRequired && !isConsentChecked;
 
   return (
     <section
@@ -254,22 +278,30 @@ export function CommunicationActionsForm({
             ) : null}
           </div>
 
-          <div className="mt-1 flex items-start gap-2">
-            <input
-              id="rep-consent"
-              type="checkbox"
-              checked={isConsentChecked}
-              aria-describedby="rep-consent-label"
-              className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#CBCDD6] text-[#0063A3] focus:ring-2 focus:ring-[#0063A3]"
-              onChange={(e) => setIsConsentChecked(e.target.checked)}
-            />
-            <label id="rep-consent-label" htmlFor="rep-consent" className="text-xs text-[#121212]">
-              I confirm this communication complies with Trimble Privacy Policy and Authorized
-              Customer Support protocols. <span className="text-[#DA212C]">*</span>
-            </label>
-          </div>
+          {!consentHidden ? (
+            <div className="mt-1 flex items-start gap-2">
+              <input
+                id="rep-consent"
+                type="checkbox"
+                checked={isConsentChecked}
+                disabled={consentDisabled}
+                aria-describedby="rep-consent-label"
+                className="mt-0.5 h-4 w-4 shrink-0 rounded border-[#CBCDD6] text-[#0063A3] focus:ring-2 focus:ring-[#0063A3] disabled:cursor-not-allowed disabled:opacity-70"
+                onChange={(e) => setIsConsentChecked(e.target.checked)}
+              />
+              <label id="rep-consent-label" htmlFor="rep-consent" className="text-xs text-[#121212]">
+                I confirm this communication complies with Trimble Privacy Policy and Authorized
+                Customer Support protocols.{' '}
+                {consentRequired ? <span className="text-[#DA212C]">*</span> : null}
+              </label>
+            </div>
+          ) : (
+            <p className="mt-1 text-[11px] text-[#525866]" role="status">
+              Admin audit mode — rep consent verification bypassed for this sandbox session.
+            </p>
+          )}
 
-          {submitAttempted && !isConsentChecked ? (
+          {submitAttempted && consentRequired && !isConsentChecked ? (
             <p className="text-[11px] font-semibold text-[#DA212C]" role="alert">
               Accept the confirmation checkbox before sending communication.
             </p>
@@ -282,7 +314,9 @@ export function CommunicationActionsForm({
               onClick={() => {
                 setRecipientEmail(log.recipientEmail);
                 setIsEditingRecipient(false);
-                setIsConsentChecked(false);
+                setIsConsentChecked(
+                  consentApplies ? consentCheckboxDefaultChecked(consentMode) : false,
+                );
                 setSubmitAttempted(false);
                 selectTab(activeTab);
               }}

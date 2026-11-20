@@ -24,6 +24,7 @@ export type AuditLog = {
   time: string;
   repId: string;
   repName: string;
+  repEmail: string;
   actionType: string;
   justification: string;
   recipient: string;
@@ -32,6 +33,7 @@ export type AuditLog = {
 
 export const DEFAULT_REP_TID = 'REP-4402';
 export const DEFAULT_REP_NAME = 'Sarah Jenkins';
+export const DEFAULT_REP_EMAIL = 'sarah.jenkins@trimble.com';
 
 export const ACTION_BADGE_CLASS: Record<AuditActionBadge, string> = {
   RESEND: 'bg-[#0063A3]',
@@ -98,18 +100,24 @@ export function auditActionTypeTagClass(badge: AuditActionBadge): string {
 export function resolveAuditRowRepFields(entry: AuditTimelineEntry): {
   repId: string;
   repName: string;
+  repEmail: string;
 } {
   if (entry.repTid) {
     return {
       repId: entry.repTid,
       repName: entry.repName ?? entry.actorLabel,
+      repEmail: DEFAULT_REP_EMAIL,
     };
   }
   const parenMatch = /^(.+?)\s*\((.+)\)\s*$/.exec(entry.actorLabel);
   if (parenMatch) {
-    return { repId: parenMatch[1].trim(), repName: parenMatch[2].trim() };
+    return {
+      repId: parenMatch[1].trim(),
+      repName: parenMatch[2].trim(),
+      repEmail: DEFAULT_REP_EMAIL,
+    };
   }
-  return { repId: '—', repName: entry.actorLabel };
+  return { repId: '—', repName: entry.actorLabel, repEmail: DEFAULT_REP_EMAIL };
 }
 
 export function resolveAuditRowJustificationAndNotes(entry: AuditTimelineEntry): {
@@ -133,21 +141,23 @@ export function resolveAuditRowJustificationAndNotes(entry: AuditTimelineEntry):
       notes: rest.join(' — ').trim(),
     };
   }
+  /** Stage 1: MVP — internal audit note only (no justification dropdown). */
   return {
-    justification: rawNotes,
-    notes: '',
+    justification: '—',
+    notes: rawNotes,
   };
 }
 
 export function mapAuditTimelineEntryToAuditLog(entry: AuditTimelineEntry): AuditLog {
   const { date, time } = formatAuditTableDateTime(entry.occurredAt);
-  const { repId, repName } = resolveAuditRowRepFields(entry);
+  const { repId, repName, repEmail } = resolveAuditRowRepFields(entry);
   const { justification, notes } = resolveAuditRowJustificationAndNotes(entry);
   return {
     date,
     time,
     repId,
     repName,
+    repEmail,
     actionType: auditActionTypeLabel(entry.actionBadge),
     justification,
     recipient: entry.destinationEmail,

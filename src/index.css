@@ -12,6 +12,29 @@ input[type='search']::-webkit-search-results-decoration {
   display: none;
 }
 
+/* Prototype sandbox utility bar — release stage dropdown list */
+#feature-release-stage,
+.sandbox-feature-release-stage-select {
+  color-scheme: dark;
+}
+
+#feature-release-stage option,
+.sandbox-feature-release-stage-select option {
+  color: #ffffff;
+  background-color: #1e2227;
+}
+
+#feature-error-state,
+.sandbox-feature-error-state-select {
+  color-scheme: dark;
+}
+
+#feature-error-state option,
+.sandbox-feature-error-state-select option {
+  color: #ffffff;
+  background-color: #1e2227;
+}
+
 @layer base {
   html {
     font-family: 'Open Sans', system-ui, sans-serif;
